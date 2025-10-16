@@ -67,6 +67,13 @@ function isAddress(candidate: string | null | undefined): candidate is `0x${stri
   return typeof candidate === 'string' && ADDRESS_PATTERN.test(candidate);
 }
 
+function addressesEqual(a: string | null | undefined, b: string | null | undefined) {
+  if (typeof a !== 'string' || typeof b !== 'string') {
+    return false;
+  }
+  return a.toLowerCase() === b.toLowerCase();
+}
+
 function firstValidAddress(...candidates: Array<string | null | undefined>): `0x${string}` | null {
   for (const candidate of candidates) {
     if (isAddress(candidate)) {
@@ -206,7 +213,7 @@ function buildSdk() {
     appChainIds: [chain.id],
     subAccounts: {
       creation: 'on-connect',
-      defaultAccount: 'sub',
+      defaultAccount: 'universal',
       funding: 'spend-permissions'
     } as any,
     paymasterUrls: paymasterUrl ? { [chain.id]: paymasterUrl } : undefined
@@ -233,6 +240,15 @@ export function BaseAccountProvider({ children }: { children: React.ReactNode })
   const hydrateFundingAddress = useCallback(
     async ({ force = false }: { force?: boolean } = {}) => {
       const fallback = getFallbackFundingAddress();
+      const sdkWithAccount =
+        sdk && (sdk as unknown as { account?: { get?: () => { accounts?: unknown; capabilities?: unknown } } });
+      const accountState = sdkWithAccount?.account?.get ? sdkWithAccount.account.get() : null;
+      const storedCandidate = extractFundingAddressFromCapabilities(accountState?.capabilities);
+      if (storedCandidate) {
+        setFundingAddress(storedCandidate);
+        return storedCandidate;
+      }
+
       if (!provider?.request) {
         setFundingAddress(fallback);
         return fallback;
@@ -241,6 +257,13 @@ export function BaseAccountProvider({ children }: { children: React.ReactNode })
       const accountForCapabilities = ((): `0x${string}` | null => {
         if (isAddress(universalAddress)) {
           return universalAddress;
+        }
+        if (Array.isArray(accountState?.accounts)) {
+          for (const entry of accountState.accounts) {
+            if (isAddress(entry as string)) {
+              return entry as `0x${string}`;
+            }
+          }
         }
         if (isAddress(fallback)) {
           return fallback;
@@ -263,9 +286,17 @@ export function BaseAccountProvider({ children }: { children: React.ReactNode })
           method: 'wallet_getCapabilities',
           params: [accountForCapabilities, [chainHex]],
         })) as Record<string, unknown> | null | undefined;
+        const accountsFromState = Array.isArray(accountState?.accounts)
+          ? (accountState.accounts as Array<unknown>).filter((entry): entry is `0x${string}` =>
+              isAddress(typeof entry === 'string' ? entry : undefined),
+            )
+          : [];
 
-        const candidate =
-          extractFundingAddressFromCapabilities(capabilities) ?? getFallbackFundingAddress();
+        const candidate = firstValidAddress(
+          extractFundingAddressFromCapabilities(capabilities),
+          ...accountsFromState.filter((entry) => !addressesEqual(entry, subAccount?.address)),
+          fallback,
+        );
         setFundingAddress(candidate);
         return candidate;
       } catch (addressError) {
@@ -274,7 +305,13 @@ export function BaseAccountProvider({ children }: { children: React.ReactNode })
         return fallback;
       }
     },
-    [getFallbackFundingAddress, provider, universalAddress],
+    [
+      getFallbackFundingAddress,
+      provider,
+      sdk,
+      subAccount?.address,
+      universalAddress,
+    ],
   );
 
   useEffect(() => {
@@ -301,7 +338,10 @@ export function BaseAccountProvider({ children }: { children: React.ReactNode })
     }
 
     const handleAccountsChanged = (accounts: string[]) => {
-      setUniversalAddress(accounts[0] ?? null);
+      const knownSubAddress = subAccount?.address ?? null;
+      const nextUniversal =
+        accounts.find((account) => !addressesEqual(account, knownSubAddress)) ?? accounts[0] ?? null;
+      setUniversalAddress(nextUniversal);
       void hydrateFundingAddress({ force: true });
     };
 
@@ -325,7 +365,7 @@ export function BaseAccountProvider({ children }: { children: React.ReactNode })
       emitter.removeListener?.('accountsChanged', handleAccountsChanged);
       emitter.removeListener?.('disconnect', handleDisconnect);
     };
-  }, [hydrateFundingAddress, provider]);
+  }, [hydrateFundingAddress, provider, subAccount?.address]);
 
   const fetchBalance = useCallback(
     async (override?: `0x${string}` | null) => {
@@ -460,17 +500,26 @@ export function BaseAccountProvider({ children }: { children: React.ReactNode })
     setError(null);
     try {
       const accounts = (await provider.request({ method: 'eth_requestAccounts', params: [] })) as string[];
-      setUniversalAddress(accounts[0] ?? null);
+      const knownSubAddress = subAccount?.address ?? null;
+      const preferredAccount =
+        accounts.find((account) => !addressesEqual(account, knownSubAddress)) ?? accounts[0] ?? null;
+      setUniversalAddress(preferredAccount ?? null);
       setAutoSpendEnabled(false);
+      const resolvedSub = await resolveSubAccount({ createIfMissing: false });
+      if (resolvedSub?.address && preferredAccount && addressesEqual(preferredAccount, resolvedSub.address)) {
+        const fallbackUniversal = accounts.find((account) => !addressesEqual(account, resolvedSub.address));
+        if (fallbackUniversal) {
+          setUniversalAddress(fallbackUniversal);
+        }
+      }
       await hydrateFundingAddress({ force: true });
-      await resolveSubAccount({ createIfMissing: false });
     } catch (connectError) {
       console.error('Failed to connect Base account', connectError);
       setError(connectError instanceof Error ? connectError.message : 'Unable to connect wallet');
     } finally {
       setIsConnecting(false);
     }
-  }, [hydrateFundingAddress, provider, resolveSubAccount, sdk]);
+  }, [hydrateFundingAddress, provider, resolveSubAccount, sdk, subAccount?.address]);
 
   const ensureSubAccount = useCallback(async () => {
     if (!sdk) {
