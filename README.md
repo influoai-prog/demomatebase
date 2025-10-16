@@ -115,19 +115,4 @@ npm run playwright
 
 ## Deploying
 
-Deploy the app to Vercel or any Next.js-compatible platform:
-
-1. Push this repository (or your fork) to GitHub.
-2. Import the project in [Vercel](https://vercel.com/new) and pick the repository.
-3. Set the build command to `npm run build` and the output directory to `.next` (the defaults).
-4. Add the required environment variables on the **Environment Variables** tab:
-   - `NEXT_PUBLIC_NETWORK`
-   - `NEXT_PUBLIC_BASE_RPC_URL`
-   - `NEXT_PUBLIC_BASE_PAYMASTER_URL` (optional)
-   - `NEXT_PUBLIC_PAYMENT_RECIPIENT`
-   - `NEXT_PUBLIC_PAYMENT_TOKEN`
-   - `BASE_API_KEY`
-   - `BASE_APP_ID`
-5. Deploy. The mock Base Account SDK ships with the repository, so no extra private packages are needed. If you later swap in the real SDK, provide the additional credentials required by Coinbase.
-
-Because the project builds without native dependencies and the Next.js production build passes locally (`npm run build`), the same configuration succeeds on Vercel. Preview deployments inherit the mock checkout flow, so you can demo the storefront without a connected wallet.
+Deploy the app to Vercel or any Next.js-compatible platform. Provide the same environment variables for network selection and Base credentials. Ensure RPC and paymaster URLs are accessible from the deployment environment.

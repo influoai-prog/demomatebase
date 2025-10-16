@@ -1,7 +1,6 @@
 import type { Metadata } from 'next';
 import { Inter } from 'next/font/google';
 import './globals.css';
-import { Suspense } from 'react';
 import { Navbar } from '@/components/layout/navbar';
 import { Footer } from '@/components/layout/footer';
 import { Toaster } from '@/components/ui/toaster';
@@ -22,9 +21,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body className={`${inter.className} antialiased`}>
         <Providers>
           <div className="min-h-screen">
-            <Suspense fallback={<div className="px-6 py-4 text-sm text-white/60">Loading navigation…</div>}>
-              <Navbar />
-            </Suspense>
+            <Navbar />
             <main className="mx-auto max-w-7xl px-6 py-12">{children}</main>
             <Footer />
           </div>
