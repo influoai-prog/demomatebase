@@ -160,57 +160,54 @@ export function BaseAccountProvider({ children }: { children: React.ReactNode })
     };
   }, [provider]);
 
-  const fetchBalance = useCallback(
-    async (target?: SubAccount | null) => {
-      if (!provider?.request) {
-        return null;
-      }
-      const accountAddress = target?.address ?? universalAddress ?? subAccount?.address;
-      if (!accountAddress) {
-        return null;
-      }
-
-      try {
-        if (isAddress(spendTokenAddress)) {
-          const data = encodeFunctionData({
-            abi: ERC20_BALANCE_OF_ABI,
-            functionName: 'balanceOf',
-            args: [accountAddress],
-          });
-          const balanceHex = (await provider.request({
-            method: 'eth_call',
-            params: [
-              {
-                to: spendTokenAddress,
-                data,
-              },
-              'latest',
-            ],
-          })) as string;
-          if (typeof balanceHex === 'string' && balanceHex.length > 0) {
-            const normalized = BigInt(balanceHex);
-            setSpendTokenBalance(normalized);
-            return normalized;
-          }
-        } else {
-          const balanceHex = (await provider.request({
-            method: 'eth_getBalance',
-            params: [accountAddress, 'latest'],
-          })) as string;
-          if (typeof balanceHex === 'string') {
-            const normalized = BigInt(balanceHex);
-            setSpendTokenBalance(normalized);
-            return normalized;
-          }
-        }
-      } catch (balanceError) {
-        console.warn('Failed to refresh Base balance', balanceError);
-      }
-      setSpendTokenBalance(null);
+  const fetchBalance = useCallback(async () => {
+    if (!provider?.request) {
       return null;
-    },
-    [provider, subAccount, universalAddress],
-  );
+    }
+    const accountAddress = universalAddress ?? subAccount?.address;
+    if (!accountAddress) {
+      return null;
+    }
+
+    try {
+      if (isAddress(spendTokenAddress)) {
+        const data = encodeFunctionData({
+          abi: ERC20_BALANCE_OF_ABI,
+          functionName: 'balanceOf',
+          args: [accountAddress],
+        });
+        const balanceHex = (await provider.request({
+          method: 'eth_call',
+          params: [
+            {
+              to: spendTokenAddress,
+              data,
+            },
+            'latest',
+          ],
+        })) as string;
+        if (typeof balanceHex === 'string' && balanceHex.length > 0) {
+          const normalized = BigInt(balanceHex);
+          setSpendTokenBalance(normalized);
+          return normalized;
+        }
+      } else {
+        const balanceHex = (await provider.request({
+          method: 'eth_getBalance',
+          params: [accountAddress, 'latest'],
+        })) as string;
+        if (typeof balanceHex === 'string') {
+          const normalized = BigInt(balanceHex);
+          setSpendTokenBalance(normalized);
+          return normalized;
+        }
+      }
+    } catch (balanceError) {
+      console.warn('Failed to refresh Base balance', balanceError);
+    }
+    setSpendTokenBalance(null);
+    return null;
+  }, [provider, subAccount?.address, universalAddress]);
 
   const refreshBalance = useCallback(() => fetchBalance(), [fetchBalance]);
 
@@ -223,7 +220,7 @@ export function BaseAccountProvider({ children }: { children: React.ReactNode })
       if (existing) {
         setSubAccount(existing);
         setError(null);
-        void fetchBalance(existing);
+        void fetchBalance();
         return existing;
       }
     } catch (getError) {
@@ -250,7 +247,7 @@ export function BaseAccountProvider({ children }: { children: React.ReactNode })
       setSubAccount(created);
       setAutoSpendEnabled(false);
       setError(null);
-      void fetchBalance(created);
+      void fetchBalance();
       return created;
     } catch (createError) {
       console.error('Failed to create sub account', createError);
