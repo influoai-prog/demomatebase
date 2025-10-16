@@ -50,8 +50,9 @@ export function Navbar() {
           </Link>
           <nav className="hidden items-center gap-3 text-xs uppercase tracking-[0.3em] text-white/60 md:flex">
             {categories.map((category) => {
-              const href = category.gated ? '/legal/erotic-gate' : `/shop?category=${category.label}`;
-              const active = pathname?.startsWith('/shop') && searchParams?.getAll('category').includes(category.label);
+              const href = category.gated ? '/legal/erotic-gate' : `/shop?category=${category.value}`;
+              const active =
+                pathname?.startsWith('/shop') && searchParams?.getAll('category').includes(category.value);
               return (
                 <Link
                   key={category.value}
@@ -101,7 +102,7 @@ export function Navbar() {
                 </form>
                 <div className="flex flex-col gap-2 text-sm uppercase tracking-[0.3em] text-white/60">
                   {categories.map((category) => {
-                    const href = category.gated ? '/legal/erotic-gate' : `/shop?category=${category.label}`;
+                    const href = category.gated ? '/legal/erotic-gate' : `/shop?category=${category.value}`;
                     return (
                       <Link key={category.value} href={href} className="rounded-full px-3 py-2 hover:bg-white/10 hover:text-white">
                         {category.label}
