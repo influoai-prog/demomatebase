@@ -64,15 +64,16 @@ export function ProductCard({ product }: { product: Product }) {
       <div className="grid gap-2.5 sm:grid-cols-2">
         <Button
           size="lg"
-          className="w-full rounded-full border border-white/30 bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.95),rgba(226,232,240,0.7))] text-[0.78rem] font-semibold uppercase tracking-[0.28em] text-slate-900 shadow-[0_18px_40px_-24px_rgba(226,232,240,0.85)] transition hover:border-white/60 hover:bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.98),rgba(226,232,240,0.82))]"
+          className="w-full rounded-full border border-white/20 bg-white/20 text-[0.8rem] font-semibold uppercase tracking-[0.28em] text-white shadow-[0_18px_40px_-28px_rgba(244,244,245,0.6)] hover:bg-white/30"
           onClick={handleAdd}
           disabled={!product.inStock}
         >
           Add to Cart
         </Button>
         <Button
+          variant="ghost"
           size="lg"
-          className="w-full rounded-full border border-sky-400/60 bg-[linear-gradient(135deg,rgba(56,189,248,0.24),rgba(37,99,235,0.18))] text-[0.78rem] font-semibold uppercase tracking-[0.28em] text-sky-100 shadow-[0_16px_42px_-28px_rgba(56,189,248,0.7)] transition hover:border-sky-300/70 hover:bg-[linear-gradient(135deg,rgba(56,189,248,0.36),rgba(37,99,235,0.32))]"
+          className="w-full rounded-full border border-sky-400/30 bg-sky-500/10 text-[0.8rem] font-semibold uppercase tracking-[0.28em] text-white hover:border-sky-400/50 hover:bg-sky-500/20"
           onClick={handleCheckout}
           disabled={!product.inStock}
         >

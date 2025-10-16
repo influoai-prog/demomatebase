@@ -56,9 +56,7 @@ export function CartButton() {
       }
       await payInvoice();
       setInvoicePaid(true);
-      toast.success('Base invoice settled.', {
-        description: 'Order will be added to your account shortly.',
-      });
+      toast.success('Base invoice settled. You can finish checkout now.');
     } catch (invoiceError) {
       const fallback = invoiceError instanceof Error ? invoiceError.message : 'Invoice payment failed';
       toast.error(fallback);

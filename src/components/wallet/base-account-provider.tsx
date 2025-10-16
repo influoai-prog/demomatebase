@@ -25,7 +25,6 @@ type BaseAccountContextValue = {
   sdk: BaseAccountSDK | null;
   universalAddress: string | null;
   subAccount: SubAccount | null;
-  subAccountBalanceWei: bigint | null;
   isConnecting: boolean;
   connect: () => Promise<void>;
   ensureSubAccount: () => Promise<SubAccount | null>;
@@ -34,7 +33,6 @@ type BaseAccountContextValue = {
   autoSpendEnabled: boolean;
   disconnect: () => Promise<void>;
   error: string | null;
-  refreshBalance: () => Promise<bigint | null>;
 };
 
 const BaseAccountContext = createContext<BaseAccountContextValue | null>(null);
@@ -99,7 +97,6 @@ export function BaseAccountProvider({ children }: { children: React.ReactNode })
   const provider = useMemo(() => (sdk ? sdk.getProvider() : null), [sdk]);
   const [universalAddress, setUniversalAddress] = useState<string | null>(null);
   const [subAccount, setSubAccount] = useState<SubAccount | null>(null);
-  const [subAccountBalanceWei, setSubAccountBalanceWei] = useState<bigint | null>(null);
   const [isConnecting, setIsConnecting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [autoSpendEnabled, setAutoSpendEnabled] = useState(false);
@@ -123,7 +120,6 @@ export function BaseAccountProvider({ children }: { children: React.ReactNode })
     const handleDisconnect = () => {
       setUniversalAddress(null);
       setSubAccount(null);
-      setSubAccountBalanceWei(null);
       setAutoSpendEnabled(false);
     };
 
@@ -141,36 +137,6 @@ export function BaseAccountProvider({ children }: { children: React.ReactNode })
     };
   }, [provider]);
 
-  const fetchBalance = useCallback(
-    async (target?: SubAccount | null) => {
-      if (!provider?.request) {
-        return null;
-      }
-      const account = target ?? subAccount;
-      if (!account?.address) {
-        return null;
-      }
-      try {
-        const balanceHex = (await provider.request({
-          method: 'eth_getBalance',
-          params: [account.address, 'latest'],
-        })) as string;
-        if (typeof balanceHex === 'string') {
-          const normalized = BigInt(balanceHex);
-          setSubAccountBalanceWei(normalized);
-          return normalized;
-        }
-      } catch (balanceError) {
-        console.warn('Failed to refresh Base balance', balanceError);
-      }
-      setSubAccountBalanceWei(null);
-      return null;
-    },
-    [provider, subAccount],
-  );
-
-  const refreshBalance = useCallback(() => fetchBalance(), [fetchBalance]);
-
   const resolveSubAccount = useCallback(async () => {
     if (!sdk) {
       return null;
@@ -180,7 +146,6 @@ export function BaseAccountProvider({ children }: { children: React.ReactNode })
       if (existing) {
         setSubAccount(existing);
         setError(null);
-        void fetchBalance(existing);
         return existing;
       }
     } catch (getError) {
@@ -207,14 +172,13 @@ export function BaseAccountProvider({ children }: { children: React.ReactNode })
       setSubAccount(created);
       setAutoSpendEnabled(false);
       setError(null);
-      void fetchBalance(created);
       return created;
     } catch (createError) {
       console.error('Failed to create sub account', createError);
       setError(createError instanceof Error ? createError.message : 'Unable to create sub account');
       return null;
     }
-  }, [fetchBalance, sdk]);
+  }, [sdk]);
 
   const connect = useCallback(async () => {
     if (!provider || !sdk) return;
@@ -375,7 +339,6 @@ export function BaseAccountProvider({ children }: { children: React.ReactNode })
 
     try {
       await sendInvoice();
-      await fetchBalance(ensured);
       return true;
     } catch (invoiceError) {
       if (permissionError) {
@@ -383,7 +346,7 @@ export function BaseAccountProvider({ children }: { children: React.ReactNode })
       }
       throw invoiceError instanceof Error ? invoiceError : new Error('Invoice payment failed');
     }
-  }, [ensureSubAccount, provider, autoSpendEnabled, requestAutoSpend, fetchBalance]);
+  }, [ensureSubAccount, provider, autoSpendEnabled, requestAutoSpend]);
 
   const disconnect = useCallback(async () => {
     if (!provider) return;
@@ -394,7 +357,6 @@ export function BaseAccountProvider({ children }: { children: React.ReactNode })
     } finally {
       setUniversalAddress(null);
       setSubAccount(null);
-      setSubAccountBalanceWei(null);
       setAutoSpendEnabled(false);
     }
   }, [provider]);
@@ -405,7 +367,6 @@ export function BaseAccountProvider({ children }: { children: React.ReactNode })
       sdk,
       universalAddress,
       subAccount,
-      subAccountBalanceWei,
       isConnecting,
       connect,
       ensureSubAccount,
@@ -414,14 +375,12 @@ export function BaseAccountProvider({ children }: { children: React.ReactNode })
       autoSpendEnabled,
       disconnect,
       error,
-      refreshBalance,
     }),
     [
       provider,
       sdk,
       universalAddress,
       subAccount,
-      subAccountBalanceWei,
       isConnecting,
       connect,
       ensureSubAccount,
@@ -430,7 +389,6 @@ export function BaseAccountProvider({ children }: { children: React.ReactNode })
       autoSpendEnabled,
       disconnect,
       error,
-      refreshBalance,
     ],
   );
 
