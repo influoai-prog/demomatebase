@@ -7,6 +7,7 @@ A single-page micro shop built with the Next.js App Router and Tailwind CSS. Mat
 - ✨ Frosted glass aesthetic with a responsive card grid for twelve curated products
 - 👜 Inline cart controls with add-to-cart and Base-powered checkout from every product
 - 🧊 Real Base Account SDK integration that provisions Sub Accounts on connect, enables auto spend permissions, and supports skipping repetitive approvals
+- 💳 Embedded Base Perfect Checkout flow that routes cart totals through Base Pay using Sub Accounts
 - 📦 Configurable metadata, paymaster routing, and Base network selection via environment variables
 
 ## Getting Started
@@ -36,6 +37,8 @@ NEXT_PUBLIC_BASE_INVOICE_RECIPIENT=0xYourMerchantAddress
 NEXT_PUBLIC_BASE_INVOICE_WEI=50000000000000
 NEXT_PUBLIC_BASE_AUTO_SPEND_TOKEN=0xYourPreferredToken
 NEXT_PUBLIC_BASE_AUTO_SPEND_LIMIT=1000000000000000
+NEXT_PUBLIC_BASE_CHECKOUT_RECIPIENT=0xYourMerchantAddress
+NEXT_PUBLIC_BASE_WALLET_URL=https://wallet.base.org
 ```
 
 - `NEXT_PUBLIC_NETWORK` may be set to `base` for mainnet or `base-sepolia` for testnet.
@@ -46,6 +49,12 @@ NEXT_PUBLIC_BASE_AUTO_SPEND_LIMIT=1000000000000000
 - `NEXT_PUBLIC_BASE_INVOICE_WEI` controls the value (in wei) of the authorization invoice (defaults to roughly $0.10 of ETH).
 - `NEXT_PUBLIC_BASE_AUTO_SPEND_TOKEN` (optional) narrows spend permissions to a specific ERC-20 address; omit to accept the Base native asset.
 - `NEXT_PUBLIC_BASE_AUTO_SPEND_LIMIT` tunes the auto-spend ceiling in wei (defaults to 0.001 ETH when unset).
+- `NEXT_PUBLIC_BASE_CHECKOUT_RECIPIENT` designates the address that receives the Base Perfect Checkout payment (defaults to the invoice recipient when omitted).
+- `NEXT_PUBLIC_BASE_WALLET_URL` optionally points the Base Account SDK to a custom wallet URL (defaults to the standard Base wallet when omitted).
+
+### Perfect Checkout
+
+Mate Shop wires the cart experience into Base Perfect Checkout. After provisioning a Sub Account and settling the $0.10 invoice, the “Complete Checkout” button triggers the `pay` helper from the Base Account SDK. This launches the Base Perfect Checkout overlay, requests an Auto Spend permission if needed, and settles the cart total with USDC to the configured merchant address. Transaction hashes are surfaced back in the UI so shoppers can verify the payment.
 
 ### Running Locally
 

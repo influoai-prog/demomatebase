@@ -17,6 +17,15 @@ export function formatTokenEstimate(cents: number, tokenPriceUsd: number): strin
   return tokens.toFixed(6);
 }
 
+export function centsToUsdAmount(cents: number): string {
+  const isNegative = cents < 0;
+  const absolute = Math.abs(cents);
+  const whole = Math.floor(absolute / 100);
+  const remainder = absolute % 100;
+  const value = `${whole}.${remainder.toString().padStart(2, '0')}`;
+  return isNegative ? `-${value}` : value;
+}
+
 export function calculateCartTotals(lines: Array<{ priceCents: number; quantity: number }>) {
   const subtotalCents = lines.reduce((sum, line) => sum + line.priceCents * line.quantity, 0);
   const taxRate = 0.0825;
