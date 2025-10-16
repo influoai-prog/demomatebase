@@ -9,6 +9,7 @@ A single-page micro shop built with the Next.js App Router and Tailwind CSS. Mat
 - 🧊 Real Base Account SDK integration that provisions Sub Accounts on connect, enables auto spend permissions, and supports skipping repetitive approvals
 - 💳 Embedded Base Perfect Checkout flow that routes cart totals through Base Pay using Sub Accounts
 - 📦 Configurable metadata, paymaster routing, and Base network selection via environment variables
+- 💼 Wallet tray surfaces the signing (owner) wallet alongside the sub account, live balances, and faucet/manual funding shortcuts
 
 ## Getting Started
 
