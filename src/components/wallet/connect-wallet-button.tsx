@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { Check, Loader2, LogOut, Sparkles, Wallet2 } from 'lucide-react';
+import { Loader2, LogOut, Sparkles, Wallet2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useBaseAccount } from './base-account-provider';
 import { truncateAddress } from '@/lib/utils';
@@ -10,7 +10,6 @@ export function ConnectWalletButton() {
   const {
     connect,
     disconnect,
-    requestAutoSpend,
     isConnecting,
     universalAddress,
     subAccount,
@@ -18,7 +17,6 @@ export function ConnectWalletButton() {
   } = useBaseAccount();
   const isConnected = Boolean(universalAddress);
   const [menuOpen, setMenuOpen] = useState(false);
-  const [isGranting, setIsGranting] = useState(false);
   const buttonRef = useRef<HTMLButtonElement | null>(null);
 
   useEffect(() => {
@@ -51,16 +49,6 @@ export function ConnectWalletButton() {
     }
   };
 
-  const handleGrant = async () => {
-    setIsGranting(true);
-    try {
-      await requestAutoSpend();
-    } finally {
-      setIsGranting(false);
-      setMenuOpen(false);
-    }
-  };
-
   const handleDisconnect = async () => {
     await disconnect();
     setMenuOpen(false);
@@ -77,28 +65,22 @@ export function ConnectWalletButton() {
       >
         {isConnecting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Wallet2 className="h-4 w-4" />}
         <span>{isConnected ? truncateAddress(subAccount?.address ?? universalAddress ?? '') : 'Connect Base Wallet'}</span>
-        {isConnected && (
+        {isConnected && autoSpendEnabled && (
           <span className="flex items-center gap-1 rounded-full border border-white/20 bg-white/10 px-3 py-1 text-[11px] font-medium uppercase tracking-[0.3em] text-white/70">
             <Sparkles className="h-3 w-3" />
-            {autoSpendEnabled ? 'Auto Spend' : 'Skip' }
+            Auto Spend
           </span>
         )}
       </Button>
-        {menuOpen && (
-          <div className="absolute right-0 z-50 mt-2 w-60 rounded-2xl border border-white/10 bg-slate-950/90 p-3 text-sm text-white/80 shadow-[0_25px_70px_-35px_rgba(56,189,248,0.7)] backdrop-blur-xl">
-          <p className="px-2 pb-2 text-xs uppercase tracking-[0.35em] text-white/40">Wallet</p>
+      {menuOpen && (
+        <div className="absolute right-0 z-50 mt-2 w-52 rounded-2xl border border-white/10 bg-slate-950/90 p-3 text-sm text-white/80 shadow-[0_25px_70px_-35px_rgba(56,189,248,0.7)] backdrop-blur-xl">
+          <p className="px-2 pb-3 text-xs uppercase tracking-[0.35em] text-white/40">Wallet</p>
+          <div className="flex items-center gap-2 rounded-xl px-3 py-2 text-left text-xs uppercase tracking-[0.25em] text-white/60">
+            <Sparkles className="h-4 w-4" />
+            {autoSpendEnabled ? 'Auto Spend Ready' : 'Awaiting Invoice' }
+          </div>
           <button
-            className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left transition hover:bg-white/10"
-            onClick={handleGrant}
-            disabled={isGranting}
-          >
-            {autoSpendEnabled ? <Check className="h-4 w-4 text-emerald-300" /> : <Sparkles className="h-4 w-4" />}
-            <span className="flex-1 text-xs font-medium uppercase tracking-[0.25em] text-white/70">
-              {isGranting ? 'Requesting…' : autoSpendEnabled ? 'Auto Spend Enabled' : 'Skip Future Approvals'}
-            </span>
-          </button>
-          <button
-            className="mt-1 flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left transition hover:bg-white/10"
+            className="mt-2 flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left transition hover:bg-white/10"
             onClick={handleDisconnect}
           >
             <LogOut className="h-4 w-4" />

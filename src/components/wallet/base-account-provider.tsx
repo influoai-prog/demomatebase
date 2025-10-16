@@ -36,8 +36,8 @@ const chain = network === 'base' ? base : baseSepolia;
 function buildSdk() {
   const paymasterUrl = process.env.NEXT_PUBLIC_BASE_PAYMASTER_URL;
   const sdk = createBaseAccountSDK({
-    appName: process.env.NEXT_PUBLIC_BASE_APP_NAME ?? 'Glass Gift Shop',
-    appLogoUrl: process.env.NEXT_PUBLIC_BASE_APP_LOGO ?? 'https://glass-gift-shop.vercel.app/icon.png',
+    appName: process.env.NEXT_PUBLIC_BASE_APP_NAME ?? 'Mate Shop',
+    appLogoUrl: process.env.NEXT_PUBLIC_BASE_APP_LOGO ?? 'https://mate-shop.vercel.app/icon.png',
     appChainIds: [chain.id],
     subAccounts: {
       creation: 'on-connect',
@@ -170,13 +170,17 @@ export function BaseAccountProvider({ children }: { children: React.ReactNode })
       return false;
     }
     try {
+      setError(null);
       await provider.request?.({ method: 'wallet_grantPermissions', params: [] });
+      setAutoSpendEnabled(true);
+      return true;
     } catch (grantError) {
       console.warn('Auto spend permission request failed', grantError);
+      setAutoSpendEnabled(false);
+      setError(grantError instanceof Error ? grantError.message : 'Auto spend request failed');
+      return false;
     }
-    setAutoSpendEnabled(true);
-    return true;
-  }, [ensureSubAccount, provider]);
+  }, [ensureSubAccount, provider, setError]);
 
   const disconnect = useCallback(async () => {
     if (!provider) return;
