@@ -1,24 +1,27 @@
 import type { Metadata } from 'next';
-import { Inter } from 'next/font/google';
+import { Plus_Jakarta_Sans } from 'next/font/google';
 import './globals.css';
 import { Suspense } from 'react';
 import { Navbar } from '@/components/layout/navbar';
 import { Toaster } from '@/components/ui/toaster';
 import { Providers } from './providers';
 
-const inter = Inter({ subsets: ['latin'] });
+const plusJakarta = Plus_Jakarta_Sans({
+  subsets: ['latin'],
+  weight: ['400', '500', '600', '700'],
+});
 
 export const metadata: Metadata = {
-  title: 'Glass Gift Shop',
-  description: 'A single-page Base-powered micro shop featuring a dozen luminous curios priced at five dollars or less.',
-  metadataBase: new URL('https://glass-gift-shop.local'),
+  title: 'Mate Shop',
+  description: 'Mate Shop is a single-page Base-powered marketplace for twelve micro curios priced at five dollars or less.',
+  metadataBase: new URL('https://mate-shop.local'),
   icons: [{ url: '/favicon.ico' }]
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
-      <body className={`${inter.className} antialiased`}>
+      <body className={`${plusJakarta.className} antialiased`}>
         <Providers>
           <div className="min-h-screen">
             <Suspense fallback={<div className="h-20" aria-hidden="true" />}>

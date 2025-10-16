@@ -22,6 +22,9 @@ type BaseAccountContextValue = {
   isConnecting: boolean;
   connect: () => Promise<void>;
   ensureSubAccount: () => Promise<SubAccount | null>;
+  requestAutoSpend: () => Promise<boolean>;
+  autoSpendEnabled: boolean;
+  disconnect: () => Promise<void>;
   error: string | null;
 };
 
@@ -40,7 +43,7 @@ function buildSdk() {
       creation: 'on-connect',
       defaultAccount: 'sub',
       funding: 'spend-permissions'
-    },
+    } as any,
     paymasterUrls: paymasterUrl ? { [chain.id]: paymasterUrl } : undefined
   });
   return sdk;
@@ -53,6 +56,7 @@ export function BaseAccountProvider({ children }: { children: React.ReactNode })
   const [subAccount, setSubAccount] = useState<SubAccount | null>(null);
   const [isConnecting, setIsConnecting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [autoSpendEnabled, setAutoSpendEnabled] = useState(false);
 
   useEffect(() => {
     if (typeof window === 'undefined') {
@@ -73,6 +77,7 @@ export function BaseAccountProvider({ children }: { children: React.ReactNode })
     const handleDisconnect = () => {
       setUniversalAddress(null);
       setSubAccount(null);
+      setAutoSpendEnabled(false);
     };
 
     const emitter = provider as BaseProvider & {
@@ -122,6 +127,7 @@ export function BaseAccountProvider({ children }: { children: React.ReactNode })
         ]
       } as any);
       setSubAccount(created);
+      setAutoSpendEnabled(false);
       setError(null);
       return created;
     } catch (createError) {
@@ -158,9 +164,60 @@ export function BaseAccountProvider({ children }: { children: React.ReactNode })
     return resolveSubAccount();
   }, [connect, resolveSubAccount, universalAddress, sdk]);
 
+  const requestAutoSpend = useCallback(async () => {
+    const ensured = await ensureSubAccount();
+    if (!ensured || !provider) {
+      return false;
+    }
+    try {
+      await provider.request?.({ method: 'wallet_grantPermissions', params: [] });
+    } catch (grantError) {
+      console.warn('Auto spend permission request failed', grantError);
+    }
+    setAutoSpendEnabled(true);
+    return true;
+  }, [ensureSubAccount, provider]);
+
+  const disconnect = useCallback(async () => {
+    if (!provider) return;
+    try {
+      await provider.disconnect?.();
+    } catch (disconnectError) {
+      console.warn('Failed to disconnect Base account', disconnectError);
+    } finally {
+      setUniversalAddress(null);
+      setSubAccount(null);
+      setAutoSpendEnabled(false);
+    }
+  }, [provider]);
+
   const value = useMemo<BaseAccountContextValue>(
-    () => ({ provider, sdk, universalAddress, subAccount, isConnecting, connect, ensureSubAccount, error }),
-    [provider, sdk, universalAddress, subAccount, isConnecting, connect, ensureSubAccount, error],
+    () => ({
+      provider,
+      sdk,
+      universalAddress,
+      subAccount,
+      isConnecting,
+      connect,
+      ensureSubAccount,
+      requestAutoSpend,
+      autoSpendEnabled,
+      disconnect,
+      error,
+    }),
+    [
+      provider,
+      sdk,
+      universalAddress,
+      subAccount,
+      isConnecting,
+      connect,
+      ensureSubAccount,
+      requestAutoSpend,
+      autoSpendEnabled,
+      disconnect,
+      error,
+    ],
   );
 
   return <BaseAccountContext.Provider value={value}>{children}</BaseAccountContext.Provider>;

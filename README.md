@@ -1,12 +1,12 @@
-# Glass Gift Shop
+# Mate Shop
 
-A single-page micro shop built with the Next.js App Router and Tailwind CSS. The shelf features twelve luminous curios, each marked with a frosted, pixel-glass icon and priced between one and five dollars. Wallet connectivity and checkout flows are powered by the Base Account SDK with automatic Sub Accounts and spend permissions.
+A single-page micro shop built with the Next.js App Router and Tailwind CSS. Mate Shop presents twelve luminous curios, each marked with a frosted pixel-glass icon, priced between one and five dollars, and backed by real Base Account SDK connectivity with Sub Accounts and auto spend permissions.
 
 ## Features
 
 - ✨ Frosted glass aesthetic with a responsive card grid for twelve curated products
 - 👜 Inline cart controls with add-to-cart and Base-powered checkout from every product
-- 🧊 Real Base Account SDK integration that provisions Sub Accounts on connect and enables auto spend permissions
+- 🧊 Real Base Account SDK integration that provisions Sub Accounts on connect, enables auto spend permissions, and supports skipping repetitive approvals
 - 📦 Configurable metadata, paymaster routing, and Base network selection via environment variables
 
 ## Getting Started
@@ -29,8 +29,8 @@ Create a `.env.local` file in the project root with the Base environment details
 ```env
 NEXT_PUBLIC_NETWORK=base-sepolia
 NEXT_PUBLIC_BASE_RPC_URL=https://sepolia.base.org
-NEXT_PUBLIC_BASE_APP_NAME=Glass Gift Shop
-NEXT_PUBLIC_BASE_APP_LOGO=https://glass-gift-shop.vercel.app/icon.png
+NEXT_PUBLIC_BASE_APP_NAME=Mate Shop
+NEXT_PUBLIC_BASE_APP_LOGO=https://mate-shop.vercel.app/icon.png
 NEXT_PUBLIC_BASE_PAYMASTER_URL=https://your-paymaster.example
 ```
 

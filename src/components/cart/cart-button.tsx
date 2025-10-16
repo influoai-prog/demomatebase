@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { ShoppingBag, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
@@ -11,14 +11,70 @@ import { toast } from 'sonner';
 
 export function CartButton() {
   const { items, itemCount, totalCents, removeItem, clear, isOpen, setOpen, openCart } = useCart();
-  const { subAccount, universalAddress, connect, ensureSubAccount, isConnecting, error } = useBaseAccount();
+  const {
+    subAccount,
+    universalAddress,
+    connect,
+    ensureSubAccount,
+    requestAutoSpend,
+    autoSpendEnabled,
+    isConnecting,
+    error,
+  } = useBaseAccount();
   const [isCheckingOut, setIsCheckingOut] = useState(false);
+  const [isPayingInvoice, setIsPayingInvoice] = useState(false);
+  const [invoicePaid, setInvoicePaid] = useState(false);
 
   const totals = useMemo(() => calculateCartTotals(items), [items]);
+  const invoiceCents = 10;
+
+  useEffect(() => {
+    if (!isOpen) {
+      setInvoicePaid(false);
+    }
+  }, [isOpen]);
+
+  useEffect(() => {
+    if (!items.length) {
+      setInvoicePaid(false);
+    }
+  }, [items.length]);
+
+  const handlePayInvoice = async () => {
+    if (!items.length) {
+      toast.error('Add an item to the cart before paying the invoice.');
+      return;
+    }
+    setIsPayingInvoice(true);
+    try {
+      if (!universalAddress) {
+        await connect();
+      }
+      const ensured = await ensureSubAccount();
+      if (!ensured) {
+        throw new Error('Unable to provision Base sub account');
+      }
+      const granted = await requestAutoSpend();
+      if (!granted) {
+        throw new Error('Auto spend permissions not available');
+      }
+      setInvoicePaid(true);
+      toast.success('Base invoice settled. You can finish checkout now.');
+    } catch (invoiceError) {
+      const fallback = invoiceError instanceof Error ? invoiceError.message : 'Invoice payment failed';
+      toast.error(fallback);
+    } finally {
+      setIsPayingInvoice(false);
+    }
+  };
 
   const handleCheckout = async () => {
     if (!items.length) {
       toast.error('Add an item to the cart before checking out.');
+      return;
+    }
+    if (!invoicePaid) {
+      toast.error('Pay the $0.10 Base invoice before completing checkout.');
       return;
     }
     setIsCheckingOut(true);
@@ -30,9 +86,10 @@ export function CartButton() {
       if (!ensured) {
         throw new Error('Unable to provision Base sub account');
       }
-      toast.success(`Sub account ready: ${truncateAddress(ensured.address)}`);
+      toast.success(`Order confirmed through ${truncateAddress(ensured.address)}`);
       clear();
       setOpen(false);
+      setInvoicePaid(false);
     } catch (checkoutError) {
       const fallback = checkoutError instanceof Error ? checkoutError.message : 'Checkout failed';
       toast.error(fallback);
@@ -118,9 +175,26 @@ export function CartButton() {
               <span>Total</span>
               <span>{formatCurrency(totals.totalCents)}</span>
             </div>
-            {subAccount && (
+            <div className="space-y-3 rounded-xl border border-white/10 bg-white/5 p-3">
+              <div className="flex items-center justify-between text-xs uppercase tracking-[0.3em] text-white/50">
+                <span>Base invoice</span>
+                <span className="font-semibold text-white">{formatCurrency(invoiceCents)}</span>
+              </div>
+              <p className="text-xs text-white/60">
+                A $0.10 authorization keeps your sub account active and enables auto spend so you can skip future approvals.
+              </p>
+              <Button
+                size="sm"
+                className="w-full rounded-full border border-sky-400/30 bg-sky-500/20 text-xs font-semibold uppercase tracking-[0.3em] text-white hover:bg-sky-500/30"
+                onClick={handlePayInvoice}
+                disabled={isPayingInvoice || isConnecting}
+              >
+                {isPayingInvoice || isConnecting ? 'Processing…' : invoicePaid ? 'Invoice Paid' : 'Pay $0.10 Invoice'}
+              </Button>
+            </div>
+            {autoSpendEnabled && subAccount && (
               <div className="rounded-xl border border-emerald-400/30 bg-emerald-500/10 p-3 text-xs text-emerald-100">
-                Auto spend permissions ready on <span className="font-semibold">{truncateAddress(subAccount.address)}</span>.
+                Auto spend ready on <span className="font-semibold">{truncateAddress(subAccount.address)}</span>.
               </div>
             )}
             {error && (
@@ -130,14 +204,17 @@ export function CartButton() {
               size="lg"
               className="w-full rounded-full border border-sky-400/40 bg-sky-500/20 text-base font-semibold text-white hover:bg-sky-500/30"
               onClick={handleCheckout}
-              disabled={isCheckingOut || isConnecting}
+              disabled={isCheckingOut || isConnecting || !invoicePaid}
             >
-              {isCheckingOut || isConnecting ? 'Preparing Base Checkout…' : 'Checkout with Base'}
+              {isCheckingOut || isConnecting ? 'Finalizing…' : 'Complete Checkout'}
             </Button>
             <Button
               variant="ghost"
               className="w-full text-xs uppercase tracking-[0.3em] text-white/50 hover:text-white"
-              onClick={() => clear()}
+              onClick={() => {
+                clear();
+                setInvoicePaid(false);
+              }}
               disabled={!items.length}
             >
               Clear Cart

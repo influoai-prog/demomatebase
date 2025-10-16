@@ -7,8 +7,18 @@ import { useBaseAccount } from './base-account-provider';
 import { truncateAddress } from '@/lib/utils';
 
 export function SubAccountCallout() {
-  const { connect, ensureSubAccount, isConnecting, universalAddress, subAccount, error } = useBaseAccount();
+  const {
+    connect,
+    ensureSubAccount,
+    requestAutoSpend,
+    isConnecting,
+    universalAddress,
+    subAccount,
+    autoSpendEnabled,
+    error,
+  } = useBaseAccount();
   const [isProvisioning, setIsProvisioning] = useState(false);
+  const [isGranting, setIsGranting] = useState(false);
 
   const handleEnsure = async () => {
     setIsProvisioning(true);
@@ -19,6 +29,15 @@ export function SubAccountCallout() {
     }
   };
 
+  const handleGrant = async () => {
+    setIsGranting(true);
+    try {
+      await requestAutoSpend();
+    } finally {
+      setIsGranting(false);
+    }
+  };
+
   const connectionLabel = subAccount
     ? `Sub · ${truncateAddress(subAccount.address)}`
     : universalAddress
@@ -26,23 +45,23 @@ export function SubAccountCallout() {
       : 'Not connected';
 
   return (
-    <div className="flex flex-col gap-4 rounded-3xl border border-white/15 bg-slate-950/70 p-6 text-white/80 backdrop-blur-2xl">
-      <div className="flex items-center gap-4">
-        <span className="flex h-12 w-12 items-center justify-center rounded-2xl border border-emerald-400/30 bg-emerald-500/10 text-emerald-100">
-          <ShieldCheck className="h-5 w-5" />
+    <div className="flex flex-col gap-4 rounded-3xl border border-white/10 bg-slate-950/70 p-6 text-white/80 backdrop-blur-2xl">
+      <div className="flex items-center gap-3.5">
+        <span className="flex h-11 w-11 items-center justify-center rounded-2xl border border-emerald-400/30 bg-emerald-500/10 text-emerald-100">
+          <ShieldCheck className="h-4 w-4" />
         </span>
         <div className="space-y-1">
-          <p className="text-xs uppercase tracking-[0.3em] text-white/50">Base Account</p>
-          <p className="text-lg font-semibold text-white">{connectionLabel}</p>
+          <p className="text-[11px] uppercase tracking-[0.4em] text-white/50">Base account</p>
+          <p className="text-base font-semibold text-white">{connectionLabel}</p>
         </div>
       </div>
       <p className="text-sm text-white/60">
-        Sub Accounts let you provision an app-scoped wallet with automatic spend permissions so repeat purchases stay frictionless
-        for your shoppers.
+        Mate Shop provisions a Base Sub Account on connect. Enable auto spend permissions to skip future approvals when you settle
+        the $0.10 invoice at checkout.
       </p>
-      {subAccount && (
-        <div className="flex items-center gap-2 rounded-2xl border border-sky-400/30 bg-sky-500/10 px-4 py-2 text-xs font-medium uppercase tracking-[0.3em] text-sky-100">
-          <Zap className="h-3.5 w-3.5" /> Auto spend active
+      {autoSpendEnabled && (
+        <div className="flex items-center gap-2 rounded-2xl border border-sky-400/30 bg-sky-500/10 px-4 py-2 text-[11px] font-medium uppercase tracking-[0.35em] text-sky-100">
+          <Zap className="h-3.5 w-3.5" /> Skip approvals ready
         </div>
       )}
       {!subAccount && error && (
@@ -65,6 +84,15 @@ export function SubAccountCallout() {
           disabled={isProvisioning}
         >
           {isProvisioning ? 'Preparing…' : subAccount ? 'Refresh Sub Account' : 'Provision Sub Account'}
+        </Button>
+        <Button
+          variant="ghost"
+          size="lg"
+          className="rounded-full border border-sky-400/30 bg-sky-500/10 text-sm font-semibold text-sky-100 hover:border-sky-400/50 hover:bg-sky-500/20"
+          onClick={handleGrant}
+          disabled={isGranting}
+        >
+          {isGranting ? 'Requesting…' : autoSpendEnabled ? 'Auto Spend On' : 'Skip Future Approvals'}
         </Button>
       </div>
     </div>
