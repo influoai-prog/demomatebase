@@ -21,7 +21,6 @@ export function ConnectWalletButton() {
     funderAddress,
     subAccount,
     autoSpendEnabled,
-    universalBalance,
     ownerBalance,
     subAccountBalance,
     refreshBalances,
@@ -45,8 +44,6 @@ export function ConnectWalletButton() {
   const faucetUrl = isTestnet ? 'https://www.coinbase.com/faucets/base-sepolia-testnet' : null;
   const defaultFundingLabel = formatEthBalance(defaultSubAccountFundingWei, 6);
   const ownerDisplayAddress = ownerAddress ?? connectedAddress;
-  const universalDisplayAddress = universalAddress ?? connectedAddress;
-  const funderDisplayAddress = funderAddress ?? ownerDisplayAddress ?? connectedAddress;
   const isCopied = (address: string | null) =>
     Boolean(address && copiedAddress && copiedAddress.toLowerCase() === address.toLowerCase());
 
@@ -168,6 +165,16 @@ export function ConnectWalletButton() {
       });
     } catch (faucetError) {
       const fallback = faucetError instanceof Error ? faucetError.message : 'Faucet request failed';
+      const normalized = fallback.toLowerCase();
+
+      if (normalized.includes('server configuration error')) {
+        toast.error('In-app faucet unavailable', {
+          description:
+            'Provide CDP_API_KEY_ID, CDP_API_KEY_SECRET, and CDP_WALLET_SECRET to enable Base faucet requests.',
+        });
+        return;
+      }
+
       toast.error(fallback);
     } finally {
       setPendingFaucetTarget(null);
@@ -198,23 +205,19 @@ export function ConnectWalletButton() {
             <div className="rounded-2xl border border-white/10 bg-slate-900/40 p-4">
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <p className="text-xs font-medium uppercase tracking-[0.25em] text-white/50">Connected wallet</p>
+                  <p className="text-xs font-medium uppercase tracking-[0.25em] text-white/50">Signing wallet</p>
                   <p className="mt-1 font-mono text-sm text-white">
-                    {truncateAddress(universalDisplayAddress ?? displayAddress, 6, 6) || '—'}
+                    {truncateAddress(ownerDisplayAddress ?? null, 6, 6) || '—'}
                   </p>
                 </div>
                 <div className="flex items-center gap-2">
                   <button
                     type="button"
-                    onClick={() => handleCopy(universalDisplayAddress ?? displayAddress ?? null)}
+                    onClick={() => handleCopy(ownerDisplayAddress ?? null)}
                     className="flex h-8 w-8 items-center justify-center rounded-full border border-white/10 bg-white/5 text-white/70 transition hover:text-white"
-                    aria-label="Copy connected address"
+                    aria-label="Copy signing wallet"
                   >
-                    {isCopied(universalDisplayAddress ?? displayAddress ?? null) ? (
-                      <Sparkles className="h-4 w-4" />
-                    ) : (
-                      <Copy className="h-4 w-4" />
-                    )}
+                    {isCopied(ownerDisplayAddress ?? null) ? <Sparkles className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
                   </button>
                   <button
                     type="button"
@@ -226,36 +229,6 @@ export function ConnectWalletButton() {
                   </button>
                 </div>
               </div>
-              <div className="mt-3 flex items-center justify-between text-xs text-white/60">
-                <span>Balance</span>
-                <span className="font-mono text-sm text-white">
-                  {isFetchingBalances
-                    ? 'Updating…'
-                    : universalBalance !== null
-                      ? `${formatEthBalance(universalBalance)} ETH`
-                      : '—'}
-                </span>
-              </div>
-              {balanceError && <p className="mt-2 text-xs leading-snug text-rose-300/80">{balanceError}</p>}
-            </div>
-
-            <div className="rounded-2xl border border-white/10 bg-slate-900/40 p-4">
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <p className="text-xs font-medium uppercase tracking-[0.25em] text-white/50">Signing wallet</p>
-                  <p className="mt-1 font-mono text-sm text-white">
-                    {truncateAddress(ownerDisplayAddress ?? null, 6, 6) || '—'}
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => handleCopy(ownerDisplayAddress ?? null)}
-                  className="flex h-8 w-8 items-center justify-center rounded-full border border-white/10 bg-white/5 text-white/70 transition hover:text-white"
-                  aria-label="Copy signing wallet"
-                >
-                  {isCopied(ownerDisplayAddress ?? null) ? <Sparkles className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
-                </button>
-              </div>
               <p className="mt-2 text-xs leading-relaxed text-white/60">
                 Signs Base Account requests and funds the checkout wallet when balances run low.
               </p>
@@ -265,6 +238,38 @@ export function ConnectWalletButton() {
                   {isFetchingBalances ? 'Updating…' : ownerBalance !== null ? `${formatEthBalance(ownerBalance)} ETH` : '—'}
                 </span>
               </div>
+              {subAccountAddress && (
+                <div className="mt-3 grid gap-2 text-xs text-white/60">
+                  <div className="flex items-center justify-between">
+                    <span>Checkout wallet</span>
+                    <span className="font-mono text-sm text-white">{truncateAddress(subAccountAddress, 6, 6)}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span>Checkout balance</span>
+                    <span className="font-mono text-sm text-white">
+                      {isFetchingBalances
+                        ? 'Updating…'
+                        : subAccountBalance !== null
+                          ? `${formatEthBalance(subAccountBalance)} ETH`
+                          : '—'}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span>Funded by</span>
+                    <span className="font-mono text-sm text-white">
+                      {truncateAddress(funderAddress ?? ownerDisplayAddress ?? null, 4, 4) || '—'}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span>Status</span>
+                    <span className="flex items-center gap-2 font-mono text-sm text-white">
+                      <Sparkles className={`h-3 w-3 ${autoSpendEnabled ? 'text-sky-200' : 'text-white/50'}`} />
+                      {autoSpendEnabled ? 'Auto spend' : 'Manual approval'}
+                    </span>
+                  </div>
+                </div>
+              )}
+              {balanceError && <p className="mt-3 text-xs leading-snug text-rose-300/80">{balanceError}</p>}
               <div className="mt-3 flex flex-wrap gap-2">
                 <Button
                   size="sm"
@@ -291,58 +296,19 @@ export function ConnectWalletButton() {
                     {pendingFaucetTarget === 'owner' ? 'Requesting…' : 'Request faucet ETH'}
                   </Button>
                 )}
-              </div>
-            </div>
-
-            {subAccountAddress && (
-              <div className="rounded-2xl border border-white/10 bg-slate-900/40 p-4">
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <p className="text-xs font-medium uppercase tracking-[0.25em] text-white/50">Checkout wallet</p>
-                    <p className="mt-1 font-mono text-sm text-white">{truncateAddress(subAccountAddress, 6, 6)}</p>
-                  </div>
-                  <span className="flex items-center gap-1 rounded-full border border-white/10 bg-white/5 px-2 py-1 text-[10px] font-medium uppercase tracking-[0.25em] text-white/60">
-                    <Sparkles className={`h-3 w-3 ${autoSpendEnabled ? 'text-sky-200' : 'text-white/50'}`} />
-                    Auto Spend
-                  </span>
-                </div>
-                <p className="mt-2 text-xs leading-relaxed text-white/60">
-                  Auto-spend permissions let this wallet settle Perfect Checkout without repeated approvals.
-                </p>
-                <div className="mt-3 grid gap-2 text-xs text-white/60">
-                  <div className="flex items-center justify-between">
-                    <span>Balance</span>
-                    <span className="font-mono text-sm text-white">
-                      {isFetchingBalances
-                        ? 'Updating…'
-                        : subAccountBalance !== null
-                          ? `${formatEthBalance(subAccountBalance)} ETH`
-                          : '—'}
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span>Funded by</span>
-                    <span className="font-mono text-sm text-white">
-                      {truncateAddress(funderDisplayAddress ?? null, 4, 4) || '—'}
-                    </span>
-                  </div>
-                </div>
-                {isTestnet && (
+                {isTestnet && subAccountAddress && (
                   <Button
                     size="sm"
                     variant="outline"
-                    className="mt-3 border-white/20 bg-transparent text-white/80 hover:text-white"
+                    className="border-white/20 bg-transparent text-white/80 hover:text-white"
                     onClick={() => void handleRequestFaucet(subAccountAddress, 'sub')}
                     disabled={pendingFaucetTarget !== null}
                   >
-                    {pendingFaucetTarget === 'sub' ? 'Requesting…' : 'Request faucet ETH'}
+                    {pendingFaucetTarget === 'sub' ? 'Requesting…' : 'Request checkout faucet ETH'}
                   </Button>
                 )}
-                {!autoSpendEnabled && (
-                  <p className="mt-2 text-xs text-white/60">Enable auto spend from the cart before completing checkout.</p>
-                )}
               </div>
-            )}
+            </div>
 
             <div className="grid gap-2">
               {faucetUrl && (
