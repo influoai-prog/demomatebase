@@ -2,6 +2,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { createBaseAccountSDK, getCryptoKeyAccount } from '@base-org/account';
+import { createPublicClient, http } from 'viem';
 import { base, baseSepolia } from 'viem/chains';
 
 type WalletPermission = {
@@ -25,6 +26,8 @@ type BaseAccountContextValue = {
   sdk: BaseAccountSDK | null;
   universalAddress: string | null;
   subAccount: SubAccount | null;
+  ownerAddress: `0x${string}` | null;
+  funderAddress: `0x${string}` | null;
   isConnecting: boolean;
   connect: () => Promise<void>;
   ensureSubAccount: () => Promise<SubAccount | null>;
@@ -33,6 +36,22 @@ type BaseAccountContextValue = {
   autoSpendEnabled: boolean;
   disconnect: () => Promise<void>;
   error: string | null;
+  network: 'base' | 'base-sepolia';
+  isTestnet: boolean;
+  checkoutRecipient: `0x${string}` | null;
+  universalBalance: bigint | null;
+  ownerBalance: bigint | null;
+  subAccountBalance: bigint | null;
+  refreshBalances: (overrides?: {
+    owner?: `0x${string}` | null;
+    subAccount?: `0x${string}` | null;
+    universal?: `0x${string}` | null;
+  }) => Promise<void>;
+  isFetchingBalances: boolean;
+  balanceError: string | null;
+  walletUrl: string;
+  fundSubAccount: (amountWei?: bigint) => Promise<void>;
+  defaultSubAccountFundingWei: bigint;
 };
 
 const BaseAccountContext = createContext<BaseAccountContextValue | null>(null);
@@ -43,19 +62,23 @@ const chain = network === 'base' ? base : baseSepolia;
 const HEX_PATTERN = /^0x[0-9a-fA-F]+$/;
 const ADDRESS_PATTERN = /^0x[a-fA-F0-9]{40}$/;
 
-function toHexAmount(value: string | undefined, fallback: bigint) {
+function parseAmount(value: string | undefined, fallback: bigint) {
   if (!value) {
-    return `0x${fallback.toString(16)}`;
+    return fallback;
   }
   const trimmed = value.trim();
-  if (HEX_PATTERN.test(trimmed)) {
-    return trimmed;
+  if (!trimmed) {
+    return fallback;
   }
   try {
-    return `0x${BigInt(trimmed).toString(16)}`;
+    return BigInt(HEX_PATTERN.test(trimmed) ? trimmed : trimmed);
   } catch {
-    return `0x${fallback.toString(16)}`;
+    return fallback;
   }
+}
+
+function toHex(value: bigint) {
+  return `0x${value.toString(16)}` as const;
 }
 
 function isAddress(candidate: string | undefined): candidate is `0x${string}` {
@@ -69,12 +92,27 @@ function checkSpendPermission(entry: WalletPermission | undefined) {
   return entry.permissions.spend.some((permission) => Boolean(permission.limit));
 }
 
-const spendLimitHex = toHexAmount(process.env.NEXT_PUBLIC_BASE_AUTO_SPEND_LIMIT, 10n ** 15n);
+const spendLimitWei = parseAmount(process.env.NEXT_PUBLIC_BASE_AUTO_SPEND_LIMIT, 10n ** 15n);
+const spendLimitHex = toHex(spendLimitWei);
 const spendTokenAddress = process.env.NEXT_PUBLIC_BASE_AUTO_SPEND_TOKEN;
 const invoiceRecipientAddress = process.env.NEXT_PUBLIC_BASE_INVOICE_RECIPIENT;
-const invoiceAmountHex = toHexAmount(process.env.NEXT_PUBLIC_BASE_INVOICE_WEI, 50_000_000_000_000n);
+const invoiceAmountWei = parseAmount(process.env.NEXT_PUBLIC_BASE_INVOICE_WEI, 50_000_000_000_000n);
+const invoiceAmountHex = toHex(invoiceAmountWei);
 const configuredPaymasterUrl = process.env.NEXT_PUBLIC_BASE_PAYMASTER_URL;
 const chainHex = `0x${chain.id.toString(16)}` as const;
+const isTestnet = network !== 'base';
+const defaultCheckoutRecipient = isAddress(invoiceRecipientAddress) ? invoiceRecipientAddress : null;
+const defaultWalletUrl = process.env.NEXT_PUBLIC_BASE_WALLET_URL ?? 'https://wallet.base.org';
+const defaultSubAccountFundingWei = parseAmount(
+  process.env.NEXT_PUBLIC_BASE_SUBACCOUNT_FUND_WEI,
+  500_000_000_000_000n,
+);
+
+const defaultRpcHttpUrls = chain.rpcUrls.default?.http ?? [];
+const publicRpcHttpUrls =
+  (chain.rpcUrls as typeof chain.rpcUrls & { public?: { http?: readonly string[] } }).public?.http ?? [];
+const resolvedRpcUrl =
+  process.env.NEXT_PUBLIC_BASE_RPC_URL ?? defaultRpcHttpUrls[0] ?? publicRpcHttpUrls[0] ?? null;
 
 function buildSdk() {
   const paymasterUrl = process.env.NEXT_PUBLIC_BASE_PAYMASTER_URL;
@@ -89,6 +127,13 @@ function buildSdk() {
     } as any,
     paymasterUrls: paymasterUrl ? { [chain.id]: paymasterUrl } : undefined
   });
+  sdk.subAccount.setToOwnerAccount(async () => {
+    const { account } = await getCryptoKeyAccount();
+    if (!account) {
+      throw new Error('Unable to access Base account keys');
+    }
+    return { account } as any;
+  });
   return sdk;
 }
 
@@ -97,9 +142,93 @@ export function BaseAccountProvider({ children }: { children: React.ReactNode })
   const provider = useMemo(() => (sdk ? sdk.getProvider() : null), [sdk]);
   const [universalAddress, setUniversalAddress] = useState<string | null>(null);
   const [subAccount, setSubAccount] = useState<SubAccount | null>(null);
+  const [ownerAddress, setOwnerAddress] = useState<`0x${string}` | null>(null);
   const [isConnecting, setIsConnecting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [autoSpendEnabled, setAutoSpendEnabled] = useState(false);
+  const [ownerBalance, setOwnerBalance] = useState<bigint | null>(null);
+  const [subAccountBalance, setSubAccountBalance] = useState<bigint | null>(null);
+  const [universalBalance, setUniversalBalance] = useState<bigint | null>(null);
+  const [isFetchingBalances, setIsFetchingBalances] = useState(false);
+  const [balanceError, setBalanceError] = useState<string | null>(null);
+
+  const publicClient = useMemo(() => {
+    if (!resolvedRpcUrl) {
+      return null;
+    }
+    try {
+      return createPublicClient({
+        chain,
+        transport: http(resolvedRpcUrl),
+      });
+    } catch (clientError) {
+      console.warn('Failed to create Base public client', clientError);
+      return null;
+    }
+  }, []);
+
+  const refreshBalances = useCallback(
+    async (
+      overrides?: {
+        owner?: `0x${string}` | null;
+        subAccount?: `0x${string}` | null;
+        universal?: `0x${string}` | null;
+      },
+    ) => {
+      const owner = overrides?.owner ?? ownerAddress;
+      const subAccountAddress = overrides?.subAccount ?? subAccount?.address ?? null;
+      const universal = overrides?.universal ?? (isAddress(universalAddress ?? undefined)
+        ? (universalAddress as `0x${string}`)
+        : null);
+
+      if (!publicClient) {
+        setBalanceError('Base RPC unavailable. Set NEXT_PUBLIC_BASE_RPC_URL to enable balance lookups.');
+        setOwnerBalance(null);
+        setSubAccountBalance(null);
+        setUniversalBalance(null);
+        return;
+      }
+
+      if (!owner && !subAccountAddress && !universal) {
+        setOwnerBalance(null);
+        setSubAccountBalance(null);
+        setUniversalBalance(null);
+        setBalanceError(null);
+        return;
+      }
+
+      setIsFetchingBalances(true);
+      setBalanceError(null);
+      try {
+        const addresses = new Map<`0x${string}`, bigint>();
+        const uniqueAddresses = [owner, subAccountAddress, universal]
+          .filter((candidate): candidate is `0x${string}` => Boolean(candidate))
+          .filter((value, index, array) => array.indexOf(value) === index);
+
+        await Promise.all(
+          uniqueAddresses.map(async (address) => {
+            const balance = await publicClient.getBalance({ address, blockTag: 'latest' });
+            addresses.set(address, balance);
+          }),
+        );
+
+        setOwnerBalance(owner ? addresses.get(owner) ?? null : null);
+        setSubAccountBalance(subAccountAddress ? addresses.get(subAccountAddress) ?? null : null);
+        setUniversalBalance(universal ? addresses.get(universal) ?? null : null);
+      } catch (balanceFetchError) {
+        console.warn('Failed to fetch Base balances', balanceFetchError);
+        setBalanceError(
+          balanceFetchError instanceof Error ? balanceFetchError.message : 'Unable to load balances from Base RPC.',
+        );
+        setOwnerBalance(null);
+        setSubAccountBalance(null);
+        setUniversalBalance(null);
+      } finally {
+        setIsFetchingBalances(false);
+      }
+    },
+    [ownerAddress, publicClient, subAccount?.address, universalAddress],
+  );
 
   useEffect(() => {
     if (typeof window === 'undefined') {
@@ -115,12 +244,18 @@ export function BaseAccountProvider({ children }: { children: React.ReactNode })
 
     const handleAccountsChanged = (accounts: string[]) => {
       setUniversalAddress(accounts[0] ?? null);
+      setOwnerAddress(isAddress(accounts[0]) ? accounts[0] : null);
     };
 
     const handleDisconnect = () => {
       setUniversalAddress(null);
       setSubAccount(null);
       setAutoSpendEnabled(false);
+      setOwnerAddress(null);
+      setOwnerBalance(null);
+      setSubAccountBalance(null);
+      setUniversalBalance(null);
+      setBalanceError(null);
     };
 
     const emitter = provider as BaseProvider & {
@@ -146,6 +281,10 @@ export function BaseAccountProvider({ children }: { children: React.ReactNode })
       if (existing) {
         setSubAccount(existing);
         setError(null);
+        const universalCandidate = isAddress(universalAddress ?? undefined)
+          ? (universalAddress as `0x${string}`)
+          : null;
+        await refreshBalances({ subAccount: existing.address, universal: universalCandidate });
         return existing;
       }
     } catch (getError) {
@@ -156,6 +295,12 @@ export function BaseAccountProvider({ children }: { children: React.ReactNode })
       const { account } = await getCryptoKeyAccount();
       if (!account) {
         throw new Error('Unable to access Base account keys');
+      }
+      const ownerCandidate = isAddress((account as { address?: string }).address)
+        ? ((account as { address: `0x${string}` }).address)
+        : null;
+      if (ownerCandidate) {
+        setOwnerAddress(ownerCandidate);
       }
       const keyType = 'address' in account && account.address ? 'address' : 'webauthn-p256';
       const publicKey = (account as any).address ?? (account as any).publicKey;
@@ -172,13 +317,17 @@ export function BaseAccountProvider({ children }: { children: React.ReactNode })
       setSubAccount(created);
       setAutoSpendEnabled(false);
       setError(null);
+      const universalCandidate = isAddress(universalAddress ?? undefined)
+        ? (universalAddress as `0x${string}`)
+        : null;
+      await refreshBalances({ owner: ownerCandidate, subAccount: created.address, universal: universalCandidate });
       return created;
     } catch (createError) {
       console.error('Failed to create sub account', createError);
       setError(createError instanceof Error ? createError.message : 'Unable to create sub account');
       return null;
     }
-  }, [sdk]);
+  }, [refreshBalances, sdk, universalAddress]);
 
   const connect = useCallback(async () => {
     if (!provider || !sdk) return;
@@ -186,7 +335,9 @@ export function BaseAccountProvider({ children }: { children: React.ReactNode })
     setError(null);
     try {
       const accounts = (await provider.request({ method: 'eth_requestAccounts', params: [] })) as string[];
-      setUniversalAddress(accounts[0] ?? null);
+      const primaryAccount = accounts[0] ?? null;
+      setUniversalAddress(primaryAccount);
+      setOwnerAddress(isAddress(primaryAccount ?? undefined) ? (primaryAccount as `0x${string}`) : null);
       await resolveSubAccount();
     } catch (connectError) {
       console.error('Failed to connect Base account', connectError);
@@ -339,6 +490,7 @@ export function BaseAccountProvider({ children }: { children: React.ReactNode })
 
     try {
       await sendInvoice();
+      await refreshBalances();
       return true;
     } catch (invoiceError) {
       if (permissionError) {
@@ -346,7 +498,71 @@ export function BaseAccountProvider({ children }: { children: React.ReactNode })
       }
       throw invoiceError instanceof Error ? invoiceError : new Error('Invoice payment failed');
     }
-  }, [ensureSubAccount, provider, autoSpendEnabled, requestAutoSpend]);
+  }, [ensureSubAccount, provider, autoSpendEnabled, requestAutoSpend, refreshBalances]);
+
+  const fundSubAccount = useCallback(
+    async (amountWei?: bigint) => {
+      const ensured = await ensureSubAccount();
+      if (!ensured || !provider) {
+        throw new Error('Unable to access Base sub account for funding');
+      }
+
+      const owner = ownerAddress ?? (isAddress(universalAddress ?? undefined) ? (universalAddress as `0x${string}`) : null);
+      if (!owner) {
+        throw new Error('Unable to resolve signing wallet for funding');
+      }
+
+      const value = amountWei ?? defaultSubAccountFundingWei;
+      if (value <= 0n) {
+        throw new Error('Funding amount must be greater than zero');
+      }
+
+      const valueHex = toHex(value);
+
+      const callRequest: Record<string, unknown> = {
+        version: '2.0',
+        atomicRequired: true,
+        chainId: chainHex,
+        from: owner,
+        calls: [
+          {
+            to: ensured.address,
+            data: '0x',
+            value: valueHex,
+          },
+        ],
+      };
+
+      try {
+        await provider.request?.({
+          method: 'wallet_sendCalls',
+          params: [callRequest],
+        });
+      } catch (sendCallsError) {
+        const message = sendCallsError instanceof Error ? sendCallsError.message : String(sendCallsError);
+        if (!message.toLowerCase().includes('unsupported method')) {
+          throw sendCallsError instanceof Error ? sendCallsError : new Error('Funding transfer failed');
+        }
+        await provider.request?.({
+          method: 'eth_sendTransaction',
+          params: [
+            {
+              from: owner,
+              to: ensured.address,
+              value: valueHex,
+              data: '0x',
+            },
+          ],
+        });
+      }
+
+      const universal = isAddress(universalAddress ?? undefined)
+        ? (universalAddress as `0x${string}`)
+        : null;
+      await refreshBalances({ owner, subAccount: ensured.address, universal });
+    },
+    [ensureSubAccount, ownerAddress, provider, refreshBalances, universalAddress],
+  );
 
   const disconnect = useCallback(async () => {
     if (!provider) return;
@@ -358,8 +574,20 @@ export function BaseAccountProvider({ children }: { children: React.ReactNode })
       setUniversalAddress(null);
       setSubAccount(null);
       setAutoSpendEnabled(false);
+      setOwnerAddress(null);
+      setOwnerBalance(null);
+      setSubAccountBalance(null);
+      setUniversalBalance(null);
+      setBalanceError(null);
     }
   }, [provider]);
+
+  useEffect(() => {
+    if (!ownerAddress && !subAccount?.address && !isAddress(universalAddress ?? undefined)) {
+      return;
+    }
+    void refreshBalances();
+  }, [ownerAddress, refreshBalances, subAccount?.address, universalAddress]);
 
   const value = useMemo<BaseAccountContextValue>(
     () => ({
@@ -367,6 +595,8 @@ export function BaseAccountProvider({ children }: { children: React.ReactNode })
       sdk,
       universalAddress,
       subAccount,
+      ownerAddress,
+      funderAddress: ownerAddress,
       isConnecting,
       connect,
       ensureSubAccount,
@@ -375,12 +605,25 @@ export function BaseAccountProvider({ children }: { children: React.ReactNode })
       autoSpendEnabled,
       disconnect,
       error,
+      network,
+      isTestnet,
+      checkoutRecipient: defaultCheckoutRecipient,
+      universalBalance,
+      ownerBalance,
+      subAccountBalance,
+      refreshBalances,
+      isFetchingBalances,
+      balanceError,
+      walletUrl: defaultWalletUrl,
+      fundSubAccount,
+      defaultSubAccountFundingWei,
     }),
     [
       provider,
       sdk,
       universalAddress,
       subAccount,
+      ownerAddress,
       isConnecting,
       connect,
       ensureSubAccount,
@@ -389,6 +632,13 @@ export function BaseAccountProvider({ children }: { children: React.ReactNode })
       autoSpendEnabled,
       disconnect,
       error,
+      universalBalance,
+      ownerBalance,
+      subAccountBalance,
+      refreshBalances,
+      isFetchingBalances,
+      balanceError,
+      fundSubAccount,
     ],
   );
 
