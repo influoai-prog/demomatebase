@@ -1,7 +1,7 @@
 'use client';
 
-import { createContext, useContext, useMemo } from 'react';
-import { createBaseAccountSDK } from '@base-org/account';
+import { createContext, useContext, useMemo, type ReactNode } from 'react';
+import { createBaseAccountSDK } from './mock-base-account-sdk';
 import { baseSepolia, base } from 'viem/chains';
 
 const appName = 'Glass Gift Shop';
@@ -10,7 +10,7 @@ type BaseAccountContextValue = ReturnType<typeof createBaseAccountSDK> | null;
 
 const BaseAccountContext = createContext<BaseAccountContextValue>(null);
 
-export function BaseAccountProvider({ children }: { children: React.ReactNode }) {
+export function BaseAccountProvider({ children }: { children: ReactNode }) {
   const network = (process.env.NEXT_PUBLIC_NETWORK as 'base' | 'base-sepolia') ?? 'base-sepolia';
 
   const sdk = useMemo(() => {

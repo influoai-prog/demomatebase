@@ -1,6 +1,6 @@
 # Glass Gift Shop
 
-A glassmorphism-inspired gift shop built with Next.js App Router, Tailwind CSS, and Base Account SDK. The catalog spans clothing, food, luminous gifts, and an age-gated erotic collection. Checkout provisions Base Sub Accounts, configures Auto Spend permissions, and simulates on-chain payment on Base Sepolia.
+A glassmorphism-inspired gift shop built with Next.js App Router, Tailwind CSS, and a lightweight mock of the Base Account SDK. The catalog spans clothing, food, luminous gifts, and an age-gated erotic collection. Checkout provisions simulated Base Sub Accounts, configures Auto Spend permissions, and mocks an on-chain payment on Base Sepolia.
 
 ## Features
 
@@ -8,7 +8,7 @@ A glassmorphism-inspired gift shop built with Next.js App Router, Tailwind CSS, 
 - 🛍️ Filterable, searchable product catalog with 24 seeded items across four categories
 - 🛒 Persistent cart using Zustand with quantity management and inline cart math
 - 🔐 Erotic collection protected by an 18+ confirmation gate stored in cookies
-- 🔗 Base Account SDK integration with Sub Account creation and auto spend configuration
+- 🔗 Mocked Base Account SDK integration with Sub Account creation and auto spend configuration
 - 💸 Demo checkout flow that simulates Base Sepolia payment payloads
 - 🧪 Vitest unit tests and Playwright smoke test
 
@@ -52,6 +52,17 @@ npm run dev
 
 Visit `http://localhost:3000` to explore the storefront.
 
+### Running Online (Codespaces/Gitpod)
+
+You can run the project entirely in the cloud without any local setup:
+
+1. Fork this repository.
+2. Launch a new [GitHub Codespace](https://docs.github.com/en/codespaces/getting-started/quickstart) or open the repo in [Gitpod](https://gitpod.io/).
+3. In the online terminal, run `npm install` followed by `npm run dev -- --hostname 0.0.0.0`.
+4. Use the forwarded port (typically `3000`) in the web IDE preview to access the storefront.
+
+Because the Base SDK is mocked, no external blockchain services are required for the demo checkout flow in these online environments.
+
 ### Switching Networks
 
 - For Base Sepolia: set `NEXT_PUBLIC_NETWORK=base-sepolia` and use the Sepolia RPC/paymaster URLs.
@@ -70,8 +81,19 @@ Products are stored in `src/data/products.ts`. Adjust or expand the array to see
 ### Simulating Purchases
 
 1. Add items to the cart and proceed to `/checkout`.
-2. Click **Configure Auto Spend** to trigger Sub Account creation and spend permission configuration. The server responds with a mocked payload representing the authorization window and buffer.
-3. Click **Pay with Base** to send a simulated transaction using the Sub Account address. The UI displays the generated order ID and transaction hash placeholder.
+2. Click **Connect Wallet** to generate a mock universal account in memory.
+3. Click **Configure Auto Spend** to trigger Sub Account creation and spend permission configuration. The server responds with a mocked payload representing the authorization window and buffer.
+4. Click **Pay with Base** to send a simulated transaction using the Sub Account address. The UI displays the generated order ID and transaction hash placeholder.
+
+### Mock Base Account SDK
+
+The real `@base-org/account` package requires authenticated access, which blocks automated installs. To keep the project runnable everywhere, including online sandboxes, the app ships with `src/lib/mock-base-account-sdk.ts`. This mock implements the limited subset of SDK features used in the UI:
+
+- `eth_requestAccounts` / `eth_accounts` return deterministic in-memory wallet addresses.
+- `wallet_getSubAccounts` and `wallet_addSubAccount` provision a single mock Sub Account scoped to the current browser session.
+- `eth_sendTransaction` returns a pseudo transaction hash for display purposes.
+
+When you're ready to wire up the real SDK, swap the import in `src/lib/base-account.ts` back to `@base-org/account` and reinstall dependencies.
 
 ### Running Tests
 
