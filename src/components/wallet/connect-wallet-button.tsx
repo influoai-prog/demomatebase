@@ -7,10 +7,6 @@ import { useBaseAccount } from './base-account-provider';
 import { formatEthBalance, truncateAddress } from '@/lib/utils';
 import { toast } from 'sonner';
 
-function toHexAddress(value: string | null | undefined): `0x${string}` | null {
-  return value && value.startsWith('0x') ? (value as `0x${string}`) : null;
-}
-
 export function ConnectWalletButton() {
   const {
     connect,
@@ -35,7 +31,6 @@ export function ConnectWalletButton() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [copiedAddress, setCopiedAddress] = useState<string | null>(null);
   const [isFundingSubAccount, setIsFundingSubAccount] = useState(false);
-  const [pendingFaucetTarget, setPendingFaucetTarget] = useState<'owner' | 'sub' | null>(null);
   const buttonRef = useRef<HTMLButtonElement | null>(null);
 
   const connectedAddress = ownerAddress ?? universalAddress ?? subAccount?.address ?? null;
@@ -117,67 +112,6 @@ export function ConnectWalletButton() {
       toast.error(fallback);
     } finally {
       setIsFundingSubAccount(false);
-    }
-  };
-
-  const handleRequestFaucet = async (target: `0x${string}`, scope: 'owner' | 'sub') => {
-    if (!isTestnet) {
-      toast.error('Faucet requests are only available on Base Sepolia.');
-      return;
-    }
-
-    setPendingFaucetTarget(scope);
-    try {
-      const response = await fetch('/api/faucet', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ address: target, token: 'eth' }),
-      });
-
-      let payload: any = null;
-      try {
-        payload = await response.json();
-      } catch {
-        payload = null;
-      }
-
-      if (!response.ok) {
-        const message = payload?.error ?? 'Unable to request faucet funds';
-        throw new Error(typeof message === 'string' ? message : 'Unable to request faucet funds');
-      }
-
-      const message = typeof payload?.message === 'string' ? payload.message : 'Faucet request submitted.';
-      const explorerUrl = typeof payload?.explorerUrl === 'string' ? payload.explorerUrl : null;
-      toast.success('Faucet request sent', {
-        description: explorerUrl ? (
-          <a className="underline" href={explorerUrl} target="_blank" rel="noreferrer">
-            {message}
-          </a>
-        ) : (
-          message
-        ),
-      });
-
-      await refreshBalances({
-        owner: ownerAddress ?? target,
-        subAccount: subAccountAddress,
-        universal: toHexAddress(universalAddress) ?? ownerAddress ?? target,
-      });
-    } catch (faucetError) {
-      const fallback = faucetError instanceof Error ? faucetError.message : 'Faucet request failed';
-      const normalized = fallback.toLowerCase();
-
-      if (normalized.includes('server configuration error')) {
-        toast.error('In-app faucet unavailable', {
-          description:
-            'Provide CDP_API_KEY_ID, CDP_API_KEY_SECRET, and CDP_WALLET_SECRET to enable Base faucet requests.',
-        });
-        return;
-      }
-
-      toast.error(fallback);
-    } finally {
-      setPendingFaucetTarget(null);
     }
   };
 
@@ -278,35 +212,6 @@ export function ConnectWalletButton() {
                 >
                   {isFundingSubAccount ? 'Funding…' : `Send ${defaultFundingLabel} ETH to checkout`}
                 </Button>
-                {isTestnet && ownerDisplayAddress && (
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="border-white/20 bg-transparent text-white/80 hover:text-white"
-                    onClick={() => {
-                      const target = toHexAddress(ownerDisplayAddress);
-                      if (!target) {
-                        toast.error('Unable to resolve signing wallet for faucet requests.');
-                        return;
-                      }
-                      void handleRequestFaucet(target, 'owner');
-                    }}
-                    disabled={pendingFaucetTarget !== null}
-                  >
-                    {pendingFaucetTarget === 'owner' ? 'Requesting…' : 'Request faucet ETH'}
-                  </Button>
-                )}
-                {isTestnet && subAccountAddress && (
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="border-white/20 bg-transparent text-white/80 hover:text-white"
-                    onClick={() => void handleRequestFaucet(subAccountAddress, 'sub')}
-                    disabled={pendingFaucetTarget !== null}
-                  >
-                    {pendingFaucetTarget === 'sub' ? 'Requesting…' : 'Request checkout faucet ETH'}
-                  </Button>
-                )}
               </div>
             </div>
 

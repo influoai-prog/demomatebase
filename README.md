@@ -57,7 +57,7 @@ CDP_WALLET_SECRET=your-cdp-wallet-secret
 - `NEXT_PUBLIC_BASE_CHECKOUT_RECIPIENT` designates the address that receives the Base Perfect Checkout payment (defaults to the invoice recipient when omitted).
 - `NEXT_PUBLIC_BASE_WALLET_URL` optionally points the Base Account SDK to a custom wallet URL (defaults to the standard Base wallet when omitted).
 - `NEXT_PUBLIC_BASE_SUBACCOUNT_FUND_WEI` controls the default amount (in wei) transferred from the signing wallet to the sub account when using the “Fund Sub Account” shortcut.
-- `CDP_API_KEY_ID`, `CDP_API_KEY_SECRET`, and `CDP_WALLET_SECRET` are required to enable the built-in Base Sepolia faucet endpoint that funds the signing or checkout wallets.
+- `CDP_API_KEY_ID`, `CDP_API_KEY_SECRET`, and `CDP_WALLET_SECRET` enable the built-in Base Sepolia faucet endpoint exposed at `POST /api/faucet`.
 
 ### Perfect Checkout
 
@@ -65,7 +65,7 @@ Mate Shop wires the cart experience into Base Perfect Checkout. After provisioni
 
 ### Testnet faucet support
 
-When `NEXT_PUBLIC_NETWORK` is set to `base-sepolia`, the wallet tray surfaces a “Request faucet ETH” control for both the signing wallet and the checkout sub account. The action proxies through `POST /api/faucet`, which wraps the [Coinbase Developer Platform faucet API](https://portal.cdp.coinbase.com/). Provide your CDP API key and wallet secret via `CDP_API_KEY_ID`, `CDP_API_KEY_SECRET`, and `CDP_WALLET_SECRET` to enable the integration.
+When `NEXT_PUBLIC_NETWORK` is set to `base-sepolia`, the wallet tray links directly to the official Base faucet. Projects may also call the in-app `POST /api/faucet` proxy, which wraps the [Coinbase Developer Platform faucet API](https://portal.cdp.coinbase.com/). Provide your CDP API key and wallet secret via `CDP_API_KEY_ID`, `CDP_API_KEY_SECRET`, and `CDP_WALLET_SECRET` to enable the proxy endpoint.
 
 ### Running Locally
 
