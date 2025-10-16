@@ -237,30 +237,36 @@ export function BaseAccountProvider({ children }: { children: React.ReactNode })
     return fallback;
   }, [getFallbackFundingAddress]);
 
-  const hydrateFundingAddress = useCallback(async () => {
-    if (!provider?.request) {
-      return fallbackFundingAddress();
-    }
-    try {
-      const response = (await provider.request({
-        method: 'wallet_connect',
-        params: [
-          {
-            version: '1',
-            capabilities: {},
-          },
-        ],
-      })) as WalletConnectResponse;
-      const account = Array.isArray(response?.accounts) ? response.accounts[0] : null;
-      const candidate =
-        extractFundingAddressFromAccount(account ?? undefined) ?? getFallbackFundingAddress();
-      setFundingAddress(candidate);
-      return candidate;
-    } catch (addressError) {
-      console.warn('Failed to resolve Base funding address', addressError);
-      return fallbackFundingAddress();
-    }
-  }, [fallbackFundingAddress, getFallbackFundingAddress, provider]);
+  const hydrateFundingAddress = useCallback(
+    async ({ force = false }: { force?: boolean } = {}) => {
+      if (!provider?.request) {
+        return fallbackFundingAddress();
+      }
+      if (!force && !universalAddress) {
+        return fallbackFundingAddress();
+      }
+      try {
+        const response = (await provider.request({
+          method: 'wallet_connect',
+          params: [
+            {
+              version: '1',
+              capabilities: {},
+            },
+          ],
+        })) as WalletConnectResponse;
+        const account = Array.isArray(response?.accounts) ? response.accounts[0] : null;
+        const candidate =
+          extractFundingAddressFromAccount(account ?? undefined) ?? getFallbackFundingAddress();
+        setFundingAddress(candidate);
+        return candidate;
+      } catch (addressError) {
+        console.warn('Failed to resolve Base funding address', addressError);
+        return fallbackFundingAddress();
+      }
+    },
+    [fallbackFundingAddress, getFallbackFundingAddress, provider, universalAddress],
+  );
 
   useEffect(() => {
     if (typeof window === 'undefined') {
@@ -274,8 +280,11 @@ export function BaseAccountProvider({ children }: { children: React.ReactNode })
       setFundingAddress(null);
       return;
     }
+    if (!universalAddress) {
+      return;
+    }
     void hydrateFundingAddress();
-  }, [hydrateFundingAddress, provider]);
+  }, [hydrateFundingAddress, provider, universalAddress]);
 
   useEffect(() => {
     if (!provider) {
@@ -284,7 +293,7 @@ export function BaseAccountProvider({ children }: { children: React.ReactNode })
 
     const handleAccountsChanged = (accounts: string[]) => {
       setUniversalAddress(accounts[0] ?? null);
-      void hydrateFundingAddress();
+      void hydrateFundingAddress({ force: true });
     };
 
     const handleDisconnect = () => {
@@ -416,7 +425,7 @@ export function BaseAccountProvider({ children }: { children: React.ReactNode })
       setSubAccount(created);
       setAutoSpendEnabled(false);
       setError(null);
-      await hydrateFundingAddress();
+      await hydrateFundingAddress({ force: true });
       return created;
     } catch (createError) {
       console.error('Failed to create sub account', createError);
@@ -432,7 +441,7 @@ export function BaseAccountProvider({ children }: { children: React.ReactNode })
     try {
       const accounts = (await provider.request({ method: 'eth_requestAccounts', params: [] })) as string[];
       setUniversalAddress(accounts[0] ?? null);
-      await hydrateFundingAddress();
+      await hydrateFundingAddress({ force: true });
       await resolveSubAccount();
     } catch (connectError) {
       console.error('Failed to connect Base account', connectError);
