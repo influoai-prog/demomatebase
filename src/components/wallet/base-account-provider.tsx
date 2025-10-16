@@ -100,7 +100,8 @@ const defaultCheckoutRecipient = isAddress(invoiceRecipientAddress) ? invoiceRec
 const defaultWalletUrl = process.env.NEXT_PUBLIC_BASE_WALLET_URL ?? 'https://wallet.base.org';
 
 const defaultRpcHttpUrls = chain.rpcUrls.default?.http ?? [];
-const publicRpcHttpUrls = chain.rpcUrls.public?.http ?? [];
+const publicRpcHttpUrls =
+  (chain.rpcUrls as typeof chain.rpcUrls & { public?: { http?: readonly string[] } }).public?.http ?? [];
 const resolvedRpcUrl =
   process.env.NEXT_PUBLIC_BASE_RPC_URL ?? defaultRpcHttpUrls[0] ?? publicRpcHttpUrls[0] ?? null;
 
