@@ -1,6 +1,8 @@
 import type { Metadata } from 'next';
 import { Inter } from 'next/font/google';
 import './globals.css';
+import '@coinbase/onchainkit/styles.css';
+import { Suspense } from 'react';
 import { Navbar } from '@/components/layout/navbar';
 import { Footer } from '@/components/layout/footer';
 import { Toaster } from '@/components/ui/toaster';
@@ -10,7 +12,7 @@ const inter = Inter({ subsets: ['latin'] });
 
 export const metadata: Metadata = {
   title: 'Glass Gift Shop',
-  description: 'Ultra-minimal glassmorphism gift shop with on-chain checkout via Base.',
+  description: 'A single-page Base-powered micro shop featuring a dozen luminous curios priced at five dollars or less.',
   metadataBase: new URL('https://glass-gift-shop.local'),
   icons: [{ url: '/favicon.ico' }]
 };
@@ -21,7 +23,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body className={`${inter.className} antialiased`}>
         <Providers>
           <div className="min-h-screen">
-            <Navbar />
+            <Suspense fallback={<div className="h-20" aria-hidden="true" />}>
+              <Navbar />
+            </Suspense>
             <main className="mx-auto max-w-7xl px-6 py-12">{children}</main>
             <Footer />
           </div>
