@@ -1,25 +1,16 @@
 'use client';
 
 import Link from 'next/link';
-import { usePathname, useRouter, useSearchParams } from 'next/navigation';
-import { Menu, Search } from 'lucide-react';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { Search } from 'lucide-react';
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
 import { Input } from '@/components/ui/input';
-import { cn } from '@/lib/utils';
 import { ConnectWalletButton } from '../wallet/connect-wallet-button';
 import { CartButton } from '@/components/cart/cart-button';
 
-const categories = [
-  { label: 'Clothing', value: 'clothing' },
-  { label: 'Food', value: 'food' },
-  { label: 'Gifts', value: 'gifts' },
-  { label: 'Erotic', value: 'erotic', gated: true }
-];
-
 export function Navbar() {
-  const pathname = usePathname();
   const router = useRouter();
   const searchParams = useSearchParams();
   const [search, setSearch] = useState(searchParams?.get('q') ?? '');
@@ -38,26 +29,9 @@ export function Navbar() {
   return (
     <header className="sticky top-0 z-40 border-b border-white/10 bg-slate-950/30 backdrop-blur-2xl">
       <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-4">
-        <div className="flex items-center gap-6">
-          <Link href="/" className="glass-button text-sm font-semibold uppercase tracking-[0.4em]">
-            Glass Gift Shop
-          </Link>
-          <nav className="hidden items-center gap-3 text-xs uppercase tracking-[0.3em] text-white/60 md:flex">
-            {categories.map((category) => {
-              const href = category.gated ? '/legal/erotic-gate' : `/shop?category=${category.label}`;
-              const active = pathname?.startsWith('/shop') && searchParams?.getAll('category').includes(category.label);
-              return (
-                <Link
-                  key={category.value}
-                  href={href}
-                  className={cn('rounded-full px-4 py-2 transition hover:text-white', active && 'bg-white/10 text-white')}
-                >
-                  {category.label}
-                </Link>
-              );
-            })}
-          </nav>
-        </div>
+        <Link href="/" className="glass-button text-sm font-semibold uppercase tracking-[0.4em]">
+          Glass Gift Shop
+        </Link>
         <div className="flex items-center gap-3">
           <form onSubmit={handleSearch} className="hidden items-center gap-2 md:flex">
             <div className="relative">
@@ -73,27 +47,24 @@ export function Navbar() {
           <ConnectWalletButton />
           <CartButton />
           <Sheet>
-            <SheetTrigger className="flex h-10 w-10 items-center justify-center rounded-full border border-white/20 bg-white/10 text-white/70 md:hidden">
-              <Menu className="h-5 w-5" />
+            <SheetTrigger
+              className="flex h-10 w-10 items-center justify-center rounded-full border border-white/20 bg-white/10 text-white/70 md:hidden"
+              aria-label="Open search"
+            >
+              <Search className="h-5 w-5" />
             </SheetTrigger>
             <SheetContent>
               <div className="mt-12 flex flex-col gap-4">
                 <form onSubmit={handleSearch} className="flex items-center gap-2">
-                  <Input placeholder="Search gifts" value={search} onChange={(event) => setSearch(event.target.value)} />
+                  <Input
+                    placeholder="Search gifts"
+                    value={search}
+                    onChange={(event) => setSearch(event.target.value)}
+                  />
                   <Button type="submit" className="rounded-full">
                     Search
                   </Button>
                 </form>
-                <div className="flex flex-col gap-2 text-sm uppercase tracking-[0.3em] text-white/60">
-                  {categories.map((category) => {
-                    const href = category.gated ? '/legal/erotic-gate' : `/shop?category=${category.label}`;
-                    return (
-                      <Link key={category.value} href={href} className="rounded-full px-3 py-2 hover:bg-white/10 hover:text-white">
-                        {category.label}
-                      </Link>
-                    );
-                  })}
-                </div>
               </div>
             </SheetContent>
           </Sheet>

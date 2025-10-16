@@ -62,8 +62,8 @@ function toHexAmount(value: string | undefined, fallback: bigint) {
   }
 }
 
-function isAddress(candidate: string | undefined): candidate is `0x${string}` {
-  return candidate !== undefined && ADDRESS_PATTERN.test(candidate);
+function isAddress(candidate: string | null | undefined): candidate is `0x${string}` {
+  return typeof candidate === 'string' && ADDRESS_PATTERN.test(candidate);
 }
 
 function checkSpendPermission(entry: WalletPermission | undefined) {
@@ -164,10 +164,11 @@ export function BaseAccountProvider({ children }: { children: React.ReactNode })
     if (!provider?.request) {
       return null;
     }
-    const accountAddress = universalAddress ?? subAccount?.address;
-    if (!accountAddress) {
+    const accountAddressCandidate = universalAddress ?? subAccount?.address ?? null;
+    if (!isAddress(accountAddressCandidate)) {
       return null;
     }
+    const accountAddress = accountAddressCandidate;
 
     try {
       if (isAddress(spendTokenAddress)) {
