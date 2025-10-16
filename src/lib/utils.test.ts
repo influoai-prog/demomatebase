@@ -7,7 +7,7 @@ describe('utils', () => {
   });
 
   it('estimates tokens', () => {
-    expect(formatTokenEstimate(10000, 2500)).toBe('0.004000');
+    expect(formatTokenEstimate(10000, 2500)).toBe('0.040000');
   });
 
   it('calculates cart totals', () => {
