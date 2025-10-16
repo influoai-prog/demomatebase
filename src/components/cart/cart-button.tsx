@@ -16,7 +16,7 @@ export function CartButton() {
     universalAddress,
     connect,
     ensureSubAccount,
-    requestAutoSpend,
+    payInvoice,
     autoSpendEnabled,
     isConnecting,
     error,
@@ -54,12 +54,13 @@ export function CartButton() {
       if (!ensured) {
         throw new Error('Unable to provision Base sub account');
       }
-      await requestAutoSpend();
+      await payInvoice();
       setInvoicePaid(true);
       toast.success('Base invoice settled. You can finish checkout now.');
     } catch (invoiceError) {
       const fallback = invoiceError instanceof Error ? invoiceError.message : 'Invoice payment failed';
       toast.error(fallback);
+      setInvoicePaid(false);
     } finally {
       setIsPayingInvoice(false);
     }
@@ -182,7 +183,7 @@ export function CartButton() {
               </p>
               <Button
                 size="sm"
-                className="w-full rounded-full border border-sky-400/30 bg-sky-500/20 text-[0.72rem] font-semibold uppercase tracking-[0.24em] text-white hover:bg-sky-500/30"
+                className="w-full rounded-full border border-sky-400/30 bg-sky-500/20 text-[0.78rem] font-semibold uppercase tracking-[0.28em] text-white hover:bg-sky-500/30"
                 onClick={handlePayInvoice}
                 disabled={isPayingInvoice || isConnecting}
               >
@@ -199,7 +200,7 @@ export function CartButton() {
             )}
             <Button
               size="lg"
-              className="w-full rounded-full border border-sky-400/40 bg-sky-500/20 text-[0.82rem] font-semibold uppercase tracking-[0.22em] text-white hover:bg-sky-500/30"
+              className="w-full rounded-full border border-sky-400/40 bg-sky-500/20 text-[0.84rem] font-semibold uppercase tracking-[0.26em] text-white hover:bg-sky-500/30"
               onClick={handleCheckout}
               disabled={isCheckingOut || isConnecting || !invoicePaid}
             >

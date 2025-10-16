@@ -29,6 +29,7 @@ type BaseAccountContextValue = {
   connect: () => Promise<void>;
   ensureSubAccount: () => Promise<SubAccount | null>;
   requestAutoSpend: () => Promise<boolean>;
+  payInvoice: () => Promise<boolean>;
   autoSpendEnabled: boolean;
   disconnect: () => Promise<void>;
   error: string | null;
@@ -71,6 +72,9 @@ function checkSpendPermission(entry: WalletPermission | undefined) {
 const spendLimitHex = toHexAmount(process.env.NEXT_PUBLIC_BASE_AUTO_SPEND_LIMIT, 10n ** 15n);
 const spendTokenAddress = process.env.NEXT_PUBLIC_BASE_AUTO_SPEND_TOKEN;
 const invoiceRecipientAddress = process.env.NEXT_PUBLIC_BASE_INVOICE_RECIPIENT;
+const invoiceAmountHex = toHexAmount(process.env.NEXT_PUBLIC_BASE_INVOICE_WEI, 50_000_000_000_000n);
+const configuredPaymasterUrl = process.env.NEXT_PUBLIC_BASE_PAYMASTER_URL;
+const chainHex = `0x${chain.id.toString(16)}` as const;
 
 function buildSdk() {
   const paymasterUrl = process.env.NEXT_PUBLIC_BASE_PAYMASTER_URL;
@@ -265,6 +269,85 @@ export function BaseAccountProvider({ children }: { children: React.ReactNode })
     }
   }, [ensureSubAccount, provider, setError]);
 
+  const payInvoice = useCallback(async () => {
+    const ensured = await ensureSubAccount();
+    if (!ensured || !provider) {
+      throw new Error('Unable to provision Base sub account');
+    }
+    if (!provider.request) {
+      throw new Error('Base provider unavailable for invoices');
+    }
+
+    let permissionError: Error | null = null;
+    if (!autoSpendEnabled) {
+      try {
+        await requestAutoSpend();
+      } catch (error) {
+        if (error instanceof Error) {
+          permissionError = error;
+        } else {
+          permissionError = new Error('Auto spend request failed');
+        }
+      }
+    }
+
+    const destination = isAddress(invoiceRecipientAddress) ? invoiceRecipientAddress : ensured.address;
+    const callRequest: Record<string, unknown> = {
+      version: '2.0',
+      atomicRequired: true,
+      chainId: chainHex,
+      from: ensured.address,
+      calls: [
+        {
+          to: destination,
+          data: '0x',
+          value: invoiceAmountHex,
+        },
+      ],
+    };
+
+    if (configuredPaymasterUrl) {
+      callRequest.capabilities = { paymasterUrl: configuredPaymasterUrl };
+    }
+
+    const sendInvoice = async () => {
+      try {
+        await provider.request?.({
+          method: 'wallet_sendCalls',
+          params: [callRequest],
+        });
+      } catch (sendCallsError) {
+        const message = sendCallsError instanceof Error ? sendCallsError.message : String(sendCallsError);
+        if (!message.toLowerCase().includes('unsupported method')) {
+          throw sendCallsError instanceof Error
+            ? sendCallsError
+            : new Error('Invoice payment failed');
+        }
+        await provider.request?.({
+          method: 'eth_sendTransaction',
+          params: [
+            {
+              from: ensured.address,
+              to: destination,
+              value: invoiceAmountHex,
+              data: '0x',
+            },
+          ],
+        });
+      }
+    };
+
+    try {
+      await sendInvoice();
+      return true;
+    } catch (invoiceError) {
+      if (permissionError) {
+        throw permissionError;
+      }
+      throw invoiceError instanceof Error ? invoiceError : new Error('Invoice payment failed');
+    }
+  }, [ensureSubAccount, provider, autoSpendEnabled, requestAutoSpend]);
+
   const disconnect = useCallback(async () => {
     if (!provider) return;
     try {
@@ -288,6 +371,7 @@ export function BaseAccountProvider({ children }: { children: React.ReactNode })
       connect,
       ensureSubAccount,
       requestAutoSpend,
+      payInvoice,
       autoSpendEnabled,
       disconnect,
       error,
@@ -301,6 +385,7 @@ export function BaseAccountProvider({ children }: { children: React.ReactNode })
       connect,
       ensureSubAccount,
       requestAutoSpend,
+      payInvoice,
       autoSpendEnabled,
       disconnect,
       error,

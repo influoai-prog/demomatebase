@@ -64,7 +64,7 @@ export function ProductCard({ product }: { product: Product }) {
       <div className="grid gap-2.5 sm:grid-cols-2">
         <Button
           size="lg"
-          className="w-full rounded-full border border-white/20 bg-white/20 text-[0.72rem] font-semibold uppercase tracking-[0.24em] text-white shadow-[0_18px_40px_-28px_rgba(244,244,245,0.6)] hover:bg-white/30"
+          className="w-full rounded-full border border-white/20 bg-white/20 text-[0.8rem] font-semibold uppercase tracking-[0.28em] text-white shadow-[0_18px_40px_-28px_rgba(244,244,245,0.6)] hover:bg-white/30"
           onClick={handleAdd}
           disabled={!product.inStock}
         >
@@ -73,7 +73,7 @@ export function ProductCard({ product }: { product: Product }) {
         <Button
           variant="ghost"
           size="lg"
-          className="w-full rounded-full border border-sky-400/30 bg-sky-500/10 text-[0.72rem] font-semibold uppercase tracking-[0.24em] text-white hover:border-sky-400/50 hover:bg-sky-500/20"
+          className="w-full rounded-full border border-sky-400/30 bg-sky-500/10 text-[0.8rem] font-semibold uppercase tracking-[0.28em] text-white hover:border-sky-400/50 hover:bg-sky-500/20"
           onClick={handleCheckout}
           disabled={!product.inStock}
         >
