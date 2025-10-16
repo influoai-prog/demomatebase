@@ -2,6 +2,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { createBaseAccountSDK, getCryptoKeyAccount } from '@base-org/account';
+import { formatEther } from 'viem';
 import { base, baseSepolia } from 'viem/chains';
 
 type WalletPermission = {
@@ -32,6 +33,8 @@ type BaseAccountContextValue = {
   payInvoice: () => Promise<boolean>;
   autoSpendEnabled: boolean;
   disconnect: () => Promise<void>;
+  balance: string | null;
+  refreshBalance: () => Promise<void>;
   error: string | null;
 };
 
@@ -100,6 +103,7 @@ export function BaseAccountProvider({ children }: { children: React.ReactNode })
   const [isConnecting, setIsConnecting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [autoSpendEnabled, setAutoSpendEnabled] = useState(false);
+  const [balance, setBalance] = useState<string | null>(null);
 
   useEffect(() => {
     if (typeof window === 'undefined') {
@@ -121,6 +125,7 @@ export function BaseAccountProvider({ children }: { children: React.ReactNode })
       setUniversalAddress(null);
       setSubAccount(null);
       setAutoSpendEnabled(false);
+      setBalance(null);
     };
 
     const emitter = provider as BaseProvider & {
@@ -195,6 +200,31 @@ export function BaseAccountProvider({ children }: { children: React.ReactNode })
       setIsConnecting(false);
     }
   }, [provider, resolveSubAccount, sdk]);
+
+  const refreshBalance = useCallback(async () => {
+    if (!provider || !subAccount?.address || !provider.request) {
+      setBalance(null);
+      return;
+    }
+    try {
+      const result = (await provider.request({
+        method: 'eth_getBalance',
+        params: [subAccount.address, 'latest'],
+      })) as string | undefined;
+      if (typeof result === 'string') {
+        setBalance(formatEther(BigInt(result)));
+      } else {
+        setBalance(null);
+      }
+    } catch (balanceError) {
+      console.warn('Failed to fetch Base wallet balance', balanceError);
+      setBalance(null);
+    }
+  }, [provider, subAccount?.address]);
+
+  useEffect(() => {
+    void refreshBalance();
+  }, [refreshBalance]);
 
   const ensureSubAccount = useCallback(async () => {
     if (!sdk) {
@@ -358,6 +388,7 @@ export function BaseAccountProvider({ children }: { children: React.ReactNode })
       setUniversalAddress(null);
       setSubAccount(null);
       setAutoSpendEnabled(false);
+      setBalance(null);
     }
   }, [provider]);
 
@@ -374,6 +405,8 @@ export function BaseAccountProvider({ children }: { children: React.ReactNode })
       payInvoice,
       autoSpendEnabled,
       disconnect,
+      balance,
+      refreshBalance,
       error,
     }),
     [
@@ -388,6 +421,8 @@ export function BaseAccountProvider({ children }: { children: React.ReactNode })
       payInvoice,
       autoSpendEnabled,
       disconnect,
+      balance,
+      refreshBalance,
       error,
     ],
   );
