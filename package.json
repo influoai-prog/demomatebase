@@ -13,7 +13,7 @@
     "playwright": "playwright test"
   },
   "dependencies": {
-    "@coinbase/onchainkit": "^0.38.18",
+    "@base-org/account": "^2.4.0",
     "@headlessui/react": "^1.7.17",
     "@radix-ui/react-dialog": "^1.0.5",
     "@radix-ui/react-separator": "^1.0.3",
