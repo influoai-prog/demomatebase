@@ -1,39 +1,15 @@
 'use client';
 
-import { createContext, useContext, useMemo, type ReactNode } from 'react';
-import { createBaseAccountSDK } from './mock-base-account-sdk';
-import { baseSepolia, base } from 'viem/chains';
+import { BaseAccountProvider as Provider, useBaseAccount } from '@/components/wallet/base-account-provider';
 
-const appName = 'Glass Gift Shop';
-
-type BaseAccountContextValue = ReturnType<typeof createBaseAccountSDK> | null;
-
-const BaseAccountContext = createContext<BaseAccountContextValue>(null);
-
-export function BaseAccountProvider({ children }: { children: ReactNode }) {
-  const network = (process.env.NEXT_PUBLIC_NETWORK as 'base' | 'base-sepolia') ?? 'base-sepolia';
-
-  const sdk = useMemo(() => {
-    const chain = network === 'base' ? base : baseSepolia;
-    return createBaseAccountSDK({
-      appName,
-      appLogoUrl: 'https://glass-gift-shop.vercel.app/icon.png',
-      appChainIds: [chain.id],
-      paymasterUrls: process.env.NEXT_PUBLIC_BASE_PAYMASTER_URL ? [process.env.NEXT_PUBLIC_BASE_PAYMASTER_URL] : undefined,
-      subAccounts: {
-        creation: 'manual',
-        defaultAccount: 'universal'
-      }
-    });
-  }, [network]);
-
-  return <BaseAccountContext.Provider value={sdk}>{children}</BaseAccountContext.Provider>;
+export function BaseAccountProvider({ children }: { children: React.ReactNode }) {
+  return <Provider>{children}</Provider>;
 }
 
 export function useBaseAccountSDK() {
-  const ctx = useContext(BaseAccountContext);
-  if (!ctx) {
-    throw new Error('useBaseAccountSDK must be used within BaseAccountProvider');
+  const { sdk } = useBaseAccount();
+  if (!sdk) {
+    throw new Error('Base account SDK unavailable');
   }
-  return ctx;
+  return sdk;
 }

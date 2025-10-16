@@ -5,13 +5,21 @@ import { Button } from '@/components/ui/button';
 import { useCart } from '@/lib/cart-store';
 import { createPaymentSummary } from '@/lib/payment';
 import { formatCurrency, formatTokenEstimate } from '@/lib/utils';
-import { useBaseAccountSDK } from '@/lib/base-account';
+import { useBaseAccount } from '@/components/wallet/base-account-provider';
 import { toast } from 'sonner';
 
 const TOKEN_PRICE_USD = 3200; // mocked ETH price
 
 export function CheckoutFlow() {
-  const sdk = useBaseAccountSDK();
+  const {
+    provider,
+    connect,
+    ensureSubAccount,
+    requestAutoSpend,
+    subAccount,
+    universalAddress,
+    fundingAddress,
+  } = useBaseAccount();
   const lines = useCart((state) => state.lines);
   const clearCart = useCart((state) => state.clear);
   const [isPreparing, setIsPreparing] = useState(false);
@@ -26,45 +34,28 @@ export function CheckoutFlow() {
     createPaymentSummary(lines).then(setSummary);
   }, [lines]);
 
+  const getProvider = () => {
+    if (!provider?.request) {
+      throw new Error('Base provider unavailable');
+    }
+    return provider;
+  };
+
   const connectWallet = async () => {
-    const provider = sdk.getProvider();
-    const accounts = (await provider.request({ method: 'eth_requestAccounts', params: [] })) as string[];
+    await connect();
+    const baseProvider = getProvider();
+    const accounts = (await baseProvider.request({ method: 'eth_requestAccounts', params: [] })) as string[];
     if (!accounts || accounts.length === 0) throw new Error('No account');
     return accounts[0];
   };
 
-  const ensureSubAccount = async () => {
-    const provider = sdk.getProvider();
-    const accounts = (await provider.request({ method: 'eth_requestAccounts', params: [] })) as string[];
-    const universal = accounts[0];
-    const existing = (await provider.request({
-      method: 'wallet_getSubAccounts',
-      params: [
-        {
-          account: universal,
-          domain: typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000'
-        }
-      ]
-    })) as { subAccounts: Array<{ address: string }> };
-
-    if (existing?.subAccounts?.[0]) {
-      setSubAccountId(existing.subAccounts[0].address);
-      return existing.subAccounts[0].address;
+  const ensureSubAccountAddress = async () => {
+    const ensured = await ensureSubAccount();
+    if (!ensured) {
+      throw new Error('Unable to provision Base sub account');
     }
-
-    const created = (await provider.request({
-      method: 'wallet_addSubAccount',
-      params: [
-        {
-          account: {
-            type: 'create'
-          }
-        }
-      ]
-    })) as { address: string };
-
-    setSubAccountId(created.address);
-    return created.address;
+    setSubAccountId(ensured.address);
+    return ensured.address;
   };
 
   const prepare = async () => {
@@ -73,7 +64,12 @@ export function CheckoutFlow() {
       setIsPreparing(true);
       setStatus('prepare');
       await connectWallet();
-      const subId = await ensureSubAccount();
+      const subId = await ensureSubAccountAddress();
+      try {
+        await requestAutoSpend();
+      } catch (permissionError) {
+        console.warn('Auto spend request failed', permissionError);
+      }
       const response = await fetch('/api/checkout/prepare', {
         method: 'POST',
         body: JSON.stringify({
@@ -112,14 +108,18 @@ export function CheckoutFlow() {
     try {
       setIsPaying(true);
       setStatus('paying');
-      const provider = sdk.getProvider();
-      const [, sub] = (await provider.request({ method: 'eth_requestAccounts', params: [] })) as string[];
+      const baseProvider = getProvider();
+      const accounts = (await baseProvider.request({ method: 'eth_requestAccounts', params: [] })) as string[];
+      const from = fundingAddress ?? accounts[0] ?? subAccount?.address ?? universalAddress;
+      if (!from) {
+        throw new Error('No Base account available for payment');
+      }
       const toPay = summary.recipient;
-      const tx = (await provider.request({
+      const tx = (await baseProvider.request({
         method: 'eth_sendTransaction',
         params: [
           {
-            from: sub ?? subAccountId,
+            from,
             to: toPay,
             value: `0x${Math.round((summary.totalCents / 100 / TOKEN_PRICE_USD) * 1e18).toString(16)}`
           }

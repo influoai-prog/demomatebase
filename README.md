@@ -1,6 +1,6 @@
-# Glass Gift Shop
+# Mate Shop
 
-A glassmorphism-inspired gift shop built with Next.js App Router, Tailwind CSS, and a lightweight mock of the Base Account SDK. The catalog spans clothing, food, luminous gifts, and an age-gated erotic collection. Checkout provisions simulated Base Sub Accounts, configures Auto Spend permissions, and mocks an on-chain payment on Base Sepolia.
+Mate Shop is a glassmorphism-inspired gift shop built with the Next.js App Router and Tailwind CSS that now talks directly to the real `@base-org/account` SDK. Shoppers browse luminous clothing, food, gifts, and an age-gated erotic collection, then settle a live Base invoice that keeps their sub account active before completing checkout.
 
 ## Features
 
@@ -8,8 +8,8 @@ A glassmorphism-inspired gift shop built with Next.js App Router, Tailwind CSS, 
 - 🛍️ Filterable, searchable product catalog with 24 seeded items across four categories
 - 🛒 Persistent cart using Zustand with quantity management and inline cart math
 - 🔐 Erotic collection protected by an 18+ confirmation gate stored in cookies
-- 🔗 Mocked Base Account SDK integration with Sub Account creation and auto spend configuration
-- 💸 Demo checkout flow that simulates Base Sepolia payment payloads
+- 🔗 Real Base Account SDK integration with sub account creation, auto spend permissions, and invoice settlement
+- 💸 Drawer-based checkout that requires a live $0.10 Base invoice before confirming the order
 - 🧪 Vitest unit tests and Playwright smoke test
 
 ## Getting Started
@@ -31,18 +31,21 @@ Create a `.env.local` file in the project root:
 
 ```env
 NEXT_PUBLIC_NETWORK=base-sepolia
-BASE_API_KEY=YOUR_KEY
-BASE_APP_ID=your_app_id
-NEXT_PUBLIC_BASE_RPC_URL=https://sepolia.base.org
+NEXT_PUBLIC_BASE_APP_NAME=Mate Shop
+NEXT_PUBLIC_BASE_APP_LOGO=https://mate-shop.vercel.app/icon.png
+NEXT_PUBLIC_BASE_AUTO_SPEND_LIMIT=1000000000000000
+NEXT_PUBLIC_BASE_AUTO_SPEND_TOKEN=0x5425890298aed601595a70ab815c96711a31bc65
+NEXT_PUBLIC_BASE_AUTO_SPEND_TOKEN_DECIMALS=6
+NEXT_PUBLIC_BASE_INVOICE_RECIPIENT=0x5d5b47Fb9137E8ffFD9472A5480C219c2B33Ff22
+NEXT_PUBLIC_BASE_INVOICE_WEI=50000000000000
 NEXT_PUBLIC_BASE_PAYMASTER_URL=https://your-paymaster.example
-NEXT_PUBLIC_PAYMENT_RECIPIENT=0x5d5b47Fb9137E8ffFD9472A5480C219c2B33Ff22
-NEXT_PUBLIC_PAYMENT_TOKEN=0x0000000000000000000000000000000000000000
 ```
 
 - `NEXT_PUBLIC_NETWORK` toggles Base Sepolia (`base-sepolia`) or Base mainnet (`base`).
-- `NEXT_PUBLIC_BASE_RPC_URL` should target the appropriate Base RPC endpoint.
-- `NEXT_PUBLIC_BASE_PAYMASTER_URL` is optional if sponsoring gas.
-- `NEXT_PUBLIC_PAYMENT_RECIPIENT` and `NEXT_PUBLIC_PAYMENT_TOKEN` define the store contract/address and settlement token.
+- `NEXT_PUBLIC_BASE_APP_NAME` and `NEXT_PUBLIC_BASE_APP_LOGO` control the wallet modal branding.
+- `NEXT_PUBLIC_BASE_AUTO_SPEND_*` configure the spend permission token, decimals, and maximum allowance.
+- `NEXT_PUBLIC_BASE_INVOICE_*` configure the invoice destination and minimum amount (in wei) that must be paid before checkout.
+- `NEXT_PUBLIC_BASE_PAYMASTER_URL` is optional if you are sponsoring gas via a paymaster.
 
 ### Running Locally
 
@@ -61,7 +64,7 @@ You can run the project entirely in the cloud without any local setup:
 3. In the online terminal, run `npm install` followed by `npm run dev -- --hostname 0.0.0.0`.
 4. Use the forwarded port (typically `3000`) in the web IDE preview to access the storefront.
 
-Because the Base SDK is mocked, no external blockchain services are required for the demo checkout flow in these online environments.
+> ℹ️ Install the Base Smart Wallet browser extension in your Codespace or Gitpod session so you can approve invoice and checkout requests.
 
 ### Switching Networks
 
@@ -80,20 +83,10 @@ Products are stored in `src/data/products.ts`. Adjust or expand the array to see
 
 ### Simulating Purchases
 
-1. Add items to the cart and proceed to `/checkout`.
-2. Click **Connect Wallet** to generate a mock universal account in memory.
-3. Click **Configure Auto Spend** to trigger Sub Account creation and spend permission configuration. The server responds with a mocked payload representing the authorization window and buffer.
-4. Click **Pay with Base** to send a simulated transaction using the Sub Account address. The UI displays the generated order ID and transaction hash placeholder.
-
-### Mock Base Account SDK
-
-The real `@base-org/account` package requires authenticated access, which blocks automated installs. To keep the project runnable everywhere, including online sandboxes, the app ships with `src/lib/mock-base-account-sdk.ts`. This mock implements the limited subset of SDK features used in the UI:
-
-- `eth_requestAccounts` / `eth_accounts` return deterministic in-memory wallet addresses.
-- `wallet_getSubAccounts` and `wallet_addSubAccount` provision a single mock Sub Account scoped to the current browser session.
-- `eth_sendTransaction` returns a pseudo transaction hash for display purposes.
-
-When you're ready to wire up the real SDK, swap the import in `src/lib/base-account.ts` back to `@base-org/account` and reinstall dependencies.
+1. Add items to the cart and open the drawer from the navbar.
+2. Click **Base Wallet** to connect your universal account.
+3. Click **Configure Auto Spend** to provision a sub account and approve the buffered spend limit.
+4. Approve the $0.10 Base invoice, then select **Complete Checkout** to send the order confirmation call.
 
 ### Running Tests
 
