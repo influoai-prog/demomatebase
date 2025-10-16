@@ -2,7 +2,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { createBaseAccountSDK, getCryptoKeyAccount } from '@base-org/account';
-import { createPublicClient, encodeFunctionData, erc20Abi, http } from 'viem';
+import { createPublicClient, http } from 'viem';
 import { base, baseSepolia } from 'viem/chains';
 
 type WalletPermission = {
@@ -27,7 +27,6 @@ type BaseAccountContextValue = {
   universalAddress: string | null;
   subAccount: SubAccount | null;
   ownerAddress: `0x${string}` | null;
-  funderAddress: `0x${string}` | null;
   isConnecting: boolean;
   connect: () => Promise<void>;
   ensureSubAccount: () => Promise<SubAccount | null>;
@@ -39,26 +38,15 @@ type BaseAccountContextValue = {
   network: 'base' | 'base-sepolia';
   isTestnet: boolean;
   checkoutRecipient: `0x${string}` | null;
-  universalBalance: bigint | null;
   ownerBalance: bigint | null;
   subAccountBalance: bigint | null;
-  universalNativeBalance: bigint | null;
-  ownerNativeBalance: bigint | null;
-  subAccountNativeBalance: bigint | null;
   refreshBalances: (overrides?: {
     owner?: `0x${string}` | null;
     subAccount?: `0x${string}` | null;
-    universal?: `0x${string}` | null;
   }) => Promise<void>;
   isFetchingBalances: boolean;
   balanceError: string | null;
   walletUrl: string;
-  fundSubAccount: (amount?: bigint) => Promise<void>;
-  defaultSubAccountFundingAmount: bigint;
-  balanceSymbol: string;
-  balanceDecimals: number;
-  nativeBalanceSymbol: string;
-  nativeBalanceDecimals: number;
 };
 
 const BaseAccountContext = createContext<BaseAccountContextValue | null>(null);
@@ -82,17 +70,6 @@ function parseAmount(value: string | undefined, fallback: bigint) {
   } catch {
     return fallback;
   }
-}
-
-function parseDecimals(value: string | undefined, fallback: number) {
-  if (!value) {
-    return fallback;
-  }
-  const parsed = Number.parseInt(value, 10);
-  if (!Number.isFinite(parsed) || parsed < 0) {
-    return fallback;
-  }
-  return parsed;
 }
 
 function toHex(value: bigint) {
@@ -128,18 +105,6 @@ function checkSpendPermission(entry: WalletPermission | undefined) {
   return entry.permissions.spend.some((permission) => Boolean(permission.limit));
 }
 
-const defaultSpendTokenConfig = network === 'base'
-  ? {
-      address: '0x833589fCd6eDb6E08f4f5F044bBd19c5436e3E6A' as `0x${string}`,
-      decimals: 6,
-      symbol: 'USDC',
-    }
-  : {
-      address: '0x036cbd53842c5426634e7929541ec2318f3dcf7e' as `0x${string}`,
-      decimals: 6,
-      symbol: 'USDC',
-    };
-
 const spendLimitWei = parseAmount(process.env.NEXT_PUBLIC_BASE_AUTO_SPEND_LIMIT, 10n ** 15n);
 const spendLimitHex = toHex(spendLimitWei);
 const spendTokenAddress = process.env.NEXT_PUBLIC_BASE_AUTO_SPEND_TOKEN;
@@ -164,10 +129,6 @@ const chainHex = `0x${chain.id.toString(16)}` as const;
 const isTestnet = network !== 'base';
 const defaultCheckoutRecipient = isAddress(invoiceRecipientAddress) ? invoiceRecipientAddress : null;
 const defaultWalletUrl = process.env.NEXT_PUBLIC_BASE_WALLET_URL ?? 'https://wallet.base.org';
-const defaultSubAccountFundingAmount = parseAmount(
-  process.env.NEXT_PUBLIC_BASE_SUBACCOUNT_FUND_WEI,
-  spendToken ? 25n * 10n ** BigInt(spendTokenDecimals) : 500_000_000_000_000n,
-);
 
 const defaultRpcHttpUrls = chain.rpcUrls.default?.http ?? [];
 const publicRpcHttpUrls =
@@ -204,16 +165,11 @@ export function BaseAccountProvider({ children }: { children: React.ReactNode })
   const [universalAddress, setUniversalAddress] = useState<string | null>(null);
   const [subAccount, setSubAccount] = useState<SubAccount | null>(null);
   const [ownerAddress, setOwnerAddress] = useState<`0x${string}` | null>(null);
-  const [connectedAccounts, setConnectedAccounts] = useState<`0x${string}`[]>([]);
   const [isConnecting, setIsConnecting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [autoSpendEnabled, setAutoSpendEnabled] = useState(false);
   const [ownerBalance, setOwnerBalance] = useState<bigint | null>(null);
   const [subAccountBalance, setSubAccountBalance] = useState<bigint | null>(null);
-  const [universalBalance, setUniversalBalance] = useState<bigint | null>(null);
-  const [ownerNativeBalance, setOwnerNativeBalance] = useState<bigint | null>(null);
-  const [subAccountNativeBalance, setSubAccountNativeBalance] = useState<bigint | null>(null);
-  const [universalNativeBalance, setUniversalNativeBalance] = useState<bigint | null>(null);
   const [isFetchingBalances, setIsFetchingBalances] = useState(false);
   const [balanceError, setBalanceError] = useState<string | null>(null);
 
@@ -233,167 +189,46 @@ export function BaseAccountProvider({ children }: { children: React.ReactNode })
   }, []);
 
   const refreshBalances = useCallback(
-    async (
-      overrides?: {
-        owner?: `0x${string}` | null;
-        subAccount?: `0x${string}` | null;
-        universal?: `0x${string}` | null;
-      },
-    ) => {
+    async (overrides?: { owner?: `0x${string}` | null; subAccount?: `0x${string}` | null }) => {
       const owner = overrides?.owner ?? ownerAddress;
       const subAccountAddress = overrides?.subAccount ?? subAccount?.address ?? null;
-      const universal = overrides?.universal ?? (isAddress(universalAddress ?? undefined)
-        ? (universalAddress as `0x${string}`)
-        : null);
 
-      const canQuery = Boolean(provider?.request) || Boolean(publicClient);
-      if (!canQuery) {
+      if (!publicClient) {
         setBalanceError('Base RPC unavailable. Set NEXT_PUBLIC_BASE_RPC_URL to enable balance lookups.');
         setOwnerBalance(null);
         setSubAccountBalance(null);
-        setUniversalBalance(null);
         return;
       }
 
-      if (!owner && !subAccountAddress && !universal) {
+      if (!owner && !subAccountAddress) {
         setOwnerBalance(null);
         setSubAccountBalance(null);
-        setUniversalBalance(null);
         setBalanceError(null);
         return;
       }
 
       setIsFetchingBalances(true);
       setBalanceError(null);
-      let hadFailures = false;
-
-      const fetchTokenBalance = async (address: `0x${string}`) => {
-        if (!spendToken) {
-          return null;
-        }
-        if (provider?.request) {
-          try {
-            const data = encodeFunctionData({
-              abi: erc20Abi,
-              functionName: 'balanceOf',
-              args: [address],
-            });
-            const result = (await provider.request({
-              method: 'eth_call',
-              params: [
-                {
-                  to: spendToken,
-                  data,
-                },
-                'latest',
-              ],
-            })) as string | null;
-            if (typeof result === 'string' && HEX_PATTERN.test(result)) {
-              return BigInt(result);
-            }
-          } catch (providerTokenError) {
-            console.warn('Failed to fetch token balance from Base provider', providerTokenError);
-          }
-        }
-        if (publicClient) {
-          try {
-            return await publicClient.readContract({
-              address: spendToken,
-              abi: erc20Abi,
-              functionName: 'balanceOf',
-              args: [address],
-              blockTag: 'latest',
-            });
-          } catch (clientTokenError) {
-            console.warn('Failed to fetch token balance from Base RPC', clientTokenError);
-          }
-        }
-        return null;
-      };
-
-      const fetchNativeBalance = async (address: `0x${string}`) => {
-        if (provider?.request) {
-          try {
-            const result = (await provider.request({
-              method: 'eth_getBalance',
-              params: [address, 'latest'],
-            })) as string | null;
-            if (typeof result === 'string' && HEX_PATTERN.test(result)) {
-              return BigInt(result);
-            }
-          } catch (providerBalanceError) {
-            console.warn('Failed to fetch native balance from Base provider', providerBalanceError);
-          }
-        }
-        if (publicClient) {
-          try {
-            return await publicClient.getBalance({ address, blockTag: 'latest' });
-          } catch (clientBalanceError) {
-            console.warn('Failed to fetch native balance from Base RPC', clientBalanceError);
-          }
-        }
-        return null;
-      };
-
       try {
-        const addresses = new Map<
-          `0x${string}`,
-          {
-            token: bigint | null;
-            native: bigint | null;
-          }
-        >();
-        const uniqueAddresses = [owner, subAccountAddress, universal]
-          .filter((candidate): candidate is `0x${string}` => Boolean(candidate))
-          .filter((value, index, array) => array.indexOf(value) === index);
+        const ownerValue = owner
+          ? await publicClient.getBalance({ address: owner, blockTag: 'latest' })
+          : null;
+        const subAccountValue = subAccountAddress
+          ? await publicClient.getBalance({ address: subAccountAddress as `0x${string}`, blockTag: 'latest' })
+          : null;
 
-        await Promise.all(
-          uniqueAddresses.map(async (address) => {
-            let tokenBalance: bigint | null = null;
-            let nativeBalance: bigint | null = null;
-            try {
-              tokenBalance = await fetchTokenBalance(address);
-              nativeBalance = await fetchNativeBalance(address);
-            } catch (balanceFetchError) {
-              console.warn('Failed to fetch Base balance', balanceFetchError);
-              hadFailures = true;
-            }
-            if (tokenBalance === null && nativeBalance === null) {
-              hadFailures = true;
-            }
-            addresses.set(address, { token: tokenBalance, native: nativeBalance });
-          }),
-        );
-
-        const resolveEntry = (address: `0x${string}` | null) => (address ? addresses.get(address) ?? null : null);
-
-        const ownerEntry = resolveEntry(owner);
-        const subAccountEntry = resolveEntry(subAccountAddress);
-        const universalEntry = resolveEntry(universal);
-
-        setOwnerBalance(ownerEntry?.token ?? null);
-        setOwnerNativeBalance(ownerEntry?.native ?? null);
-        setSubAccountBalance(subAccountEntry?.token ?? null);
-        setSubAccountNativeBalance(subAccountEntry?.native ?? null);
-        setUniversalBalance(universalEntry?.token ?? null);
-        setUniversalNativeBalance(universalEntry?.native ?? null);
-        setBalanceError(hadFailures ? 'Unable to load balances from Base RPC.' : null);
+        setOwnerBalance(ownerValue ?? null);
+        setSubAccountBalance(subAccountValue ?? null);
       } catch (balanceFetchError) {
         console.warn('Failed to fetch Base balances', balanceFetchError);
         setBalanceError(
           balanceFetchError instanceof Error ? balanceFetchError.message : 'Unable to load balances from Base RPC.',
         );
-        setOwnerBalance(null);
-        setSubAccountBalance(null);
-        setUniversalBalance(null);
-        setOwnerNativeBalance(null);
-        setSubAccountNativeBalance(null);
-        setUniversalNativeBalance(null);
       } finally {
         setIsFetchingBalances(false);
       }
     },
-    [ownerAddress, provider, publicClient, subAccount?.address, universalAddress],
+    [ownerAddress, publicClient, subAccount?.address],
   );
 
   useEffect(() => {
@@ -409,8 +244,8 @@ export function BaseAccountProvider({ children }: { children: React.ReactNode })
     }
 
     const handleAccountsChanged = (accounts: string[]) => {
-      const normalized = normalizeAccounts(accounts);
-      setConnectedAccounts(normalized);
+      setUniversalAddress(accounts[0] ?? null);
+      setOwnerAddress(isAddress(accounts[0]) ? accounts[0] : null);
     };
 
     const handleDisconnect = () => {
@@ -420,12 +255,7 @@ export function BaseAccountProvider({ children }: { children: React.ReactNode })
       setOwnerAddress(null);
       setOwnerBalance(null);
       setSubAccountBalance(null);
-      setUniversalBalance(null);
-      setOwnerNativeBalance(null);
-      setSubAccountNativeBalance(null);
-      setUniversalNativeBalance(null);
       setBalanceError(null);
-      setConnectedAccounts([]);
     };
 
     const emitter = provider as BaseProvider & {
@@ -451,11 +281,7 @@ export function BaseAccountProvider({ children }: { children: React.ReactNode })
       if (existing) {
         setSubAccount(existing);
         setError(null);
-        const universalCandidate = isAddress(universalAddress ?? undefined)
-          ? (universalAddress as `0x${string}`)
-          : null;
-        const ownerCandidate = findOwnerAccount(connectedAccounts, existing.address);
-        await refreshBalances({ owner: ownerCandidate, subAccount: existing.address, universal: universalCandidate });
+        await refreshBalances({ subAccount: existing.address });
         return existing;
       }
     } catch (getError) {
@@ -466,6 +292,12 @@ export function BaseAccountProvider({ children }: { children: React.ReactNode })
       const { account } = await getCryptoKeyAccount();
       if (!account) {
         throw new Error('Unable to access Base account keys');
+      }
+      const ownerCandidate = isAddress((account as { address?: string }).address)
+        ? ((account as { address: `0x${string}` }).address)
+        : null;
+      if (ownerCandidate) {
+        setOwnerAddress(ownerCandidate);
       }
       const keyType = 'address' in account && account.address ? 'address' : 'webauthn-p256';
       const publicKey = (account as any).address ?? (account as any).publicKey;
@@ -482,18 +314,14 @@ export function BaseAccountProvider({ children }: { children: React.ReactNode })
       setSubAccount(created);
       setAutoSpendEnabled(false);
       setError(null);
-      const universalCandidate = isAddress(universalAddress ?? undefined)
-        ? (universalAddress as `0x${string}`)
-        : null;
-      const ownerCandidate = findOwnerAccount(connectedAccounts, created.address);
-      await refreshBalances({ owner: ownerCandidate, subAccount: created.address, universal: universalCandidate });
+      await refreshBalances({ owner: ownerCandidate, subAccount: created.address });
       return created;
     } catch (createError) {
       console.error('Failed to create sub account', createError);
       setError(createError instanceof Error ? createError.message : 'Unable to create sub account');
       return null;
     }
-  }, [connectedAccounts, refreshBalances, sdk, universalAddress]);
+  }, [refreshBalances, sdk]);
 
   const connect = useCallback(async () => {
     if (!provider || !sdk) return;
@@ -501,8 +329,9 @@ export function BaseAccountProvider({ children }: { children: React.ReactNode })
     setError(null);
     try {
       const accounts = (await provider.request({ method: 'eth_requestAccounts', params: [] })) as string[];
-      const normalized = normalizeAccounts(accounts);
-      setConnectedAccounts(normalized);
+      const primaryAccount = accounts[0] ?? null;
+      setUniversalAddress(primaryAccount);
+      setOwnerAddress(isAddress(primaryAccount ?? undefined) ? (primaryAccount as `0x${string}`) : null);
       await resolveSubAccount();
     } catch (connectError) {
       console.error('Failed to connect Base account', connectError);
@@ -665,83 +494,6 @@ export function BaseAccountProvider({ children }: { children: React.ReactNode })
     }
   }, [ensureSubAccount, provider, autoSpendEnabled, requestAutoSpend, refreshBalances]);
 
-  const fundSubAccount = useCallback(
-    async (amount?: bigint) => {
-      const ensured = await ensureSubAccount();
-      if (!ensured || !provider) {
-        throw new Error('Unable to access Base sub account for funding');
-      }
-
-      const owner = ownerAddress ?? (isAddress(universalAddress ?? undefined) ? (universalAddress as `0x${string}`) : null);
-      if (!owner) {
-        throw new Error('Unable to resolve signing wallet for funding');
-      }
-
-      const value = amount ?? defaultSubAccountFundingAmount;
-      if (value <= 0n) {
-        throw new Error('Funding amount must be greater than zero');
-      }
-
-      const valueHex = toHex(value);
-      const transferData = spendToken
-        ? encodeFunctionData({
-            abi: erc20Abi,
-            functionName: 'transfer',
-            args: [ensured.address as `0x${string}`, value],
-          })
-        : '0x';
-
-      const callRequest: Record<string, unknown> = {
-        version: '2.0',
-        atomicRequired: true,
-        chainId: chainHex,
-        from: owner,
-        calls: [
-          spendToken
-            ? {
-                to: spendToken,
-                data: transferData,
-                value: '0x0',
-              }
-            : {
-                to: ensured.address,
-                data: '0x',
-                value: valueHex,
-              },
-        ],
-      };
-
-      try {
-        await provider.request?.({
-          method: 'wallet_sendCalls',
-          params: [callRequest],
-        });
-      } catch (sendCallsError) {
-        const message = sendCallsError instanceof Error ? sendCallsError.message : String(sendCallsError);
-        if (!message.toLowerCase().includes('unsupported method')) {
-          throw sendCallsError instanceof Error ? sendCallsError : new Error('Funding transfer failed');
-        }
-        await provider.request?.({
-          method: 'eth_sendTransaction',
-          params: [
-            {
-              from: owner,
-              to: spendToken ?? ensured.address,
-              value: spendToken ? '0x0' : valueHex,
-              data: transferData,
-            },
-          ],
-        });
-      }
-
-      const universal = isAddress(universalAddress ?? undefined)
-        ? (universalAddress as `0x${string}`)
-        : null;
-      await refreshBalances({ owner, subAccount: ensured.address, universal });
-    },
-    [ensureSubAccount, ownerAddress, provider, refreshBalances, universalAddress],
-  );
-
   const disconnect = useCallback(async () => {
     if (!provider) return;
     try {
@@ -755,33 +507,16 @@ export function BaseAccountProvider({ children }: { children: React.ReactNode })
       setOwnerAddress(null);
       setOwnerBalance(null);
       setSubAccountBalance(null);
-      setUniversalBalance(null);
-      setOwnerNativeBalance(null);
-      setSubAccountNativeBalance(null);
-      setUniversalNativeBalance(null);
       setBalanceError(null);
-      setConnectedAccounts([]);
     }
   }, [provider]);
 
   useEffect(() => {
-    if (!ownerAddress && !subAccount?.address && !isAddress(universalAddress ?? undefined)) {
+    if (!ownerAddress && !subAccount?.address) {
       return;
     }
     void refreshBalances();
-  }, [ownerAddress, refreshBalances, subAccount?.address, universalAddress]);
-
-  useEffect(() => {
-    if (!connectedAccounts.length) {
-      setUniversalAddress(null);
-      setOwnerAddress(null);
-      return;
-    }
-    const primary = connectedAccounts[0] ?? null;
-    const owner = findOwnerAccount(connectedAccounts, subAccount?.address ?? null);
-    setUniversalAddress(primary ?? null);
-    setOwnerAddress(owner ?? null);
-  }, [connectedAccounts, subAccount?.address]);
+  }, [ownerAddress, refreshBalances, subAccount?.address]);
 
   const value = useMemo<BaseAccountContextValue>(
     () => ({
@@ -790,7 +525,6 @@ export function BaseAccountProvider({ children }: { children: React.ReactNode })
       universalAddress,
       subAccount,
       ownerAddress,
-      funderAddress: ownerAddress,
       isConnecting,
       connect,
       ensureSubAccount,
@@ -802,22 +536,12 @@ export function BaseAccountProvider({ children }: { children: React.ReactNode })
       network,
       isTestnet,
       checkoutRecipient: defaultCheckoutRecipient,
-      universalBalance,
       ownerBalance,
       subAccountBalance,
-      universalNativeBalance,
-      ownerNativeBalance,
-      subAccountNativeBalance,
       refreshBalances,
       isFetchingBalances,
       balanceError,
       walletUrl: defaultWalletUrl,
-      fundSubAccount,
-      defaultSubAccountFundingAmount,
-      balanceSymbol,
-      balanceDecimals: spendToken ? spendTokenDecimals : 18,
-      nativeBalanceSymbol: 'ETH',
-      nativeBalanceDecimals: 18,
     }),
     [
       provider,
@@ -833,16 +557,11 @@ export function BaseAccountProvider({ children }: { children: React.ReactNode })
       autoSpendEnabled,
       disconnect,
       error,
-      universalBalance,
       ownerBalance,
       subAccountBalance,
-      universalNativeBalance,
-      ownerNativeBalance,
-      subAccountNativeBalance,
       refreshBalances,
       isFetchingBalances,
       balanceError,
-      fundSubAccount,
     ],
   );
 

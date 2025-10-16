@@ -9,7 +9,7 @@ A single-page micro shop built with the Next.js App Router and Tailwind CSS. Mat
 - 🧊 Real Base Account SDK integration that provisions Sub Accounts on connect, enables auto spend permissions, and supports skipping repetitive approvals
 - 💳 Embedded Base Perfect Checkout flow that routes cart totals through Base Pay using Sub Accounts
 - 📦 Configurable metadata, paymaster routing, and Base network selection via environment variables
-- 💼 Wallet tray surfaces the connected account, signing/funder wallet, and auto-spend sub account with live balances and one-click top-ups
+- 💼 Wallet tray surfaces the signing (owner) wallet alongside the sub account, live balances, and faucet/manual funding shortcuts
 
 ## Getting Started
 
@@ -40,10 +40,6 @@ NEXT_PUBLIC_BASE_AUTO_SPEND_TOKEN=0xYourPreferredToken
 NEXT_PUBLIC_BASE_AUTO_SPEND_LIMIT=1000000000000000
 NEXT_PUBLIC_BASE_CHECKOUT_RECIPIENT=0xYourMerchantAddress
 NEXT_PUBLIC_BASE_WALLET_URL=https://wallet.base.org
-NEXT_PUBLIC_BASE_SUBACCOUNT_FUND_WEI=500000000000000
-CDP_API_KEY_ID=your-cdp-api-key-id
-CDP_API_KEY_SECRET=your-cdp-api-key-secret
-CDP_WALLET_SECRET=your-cdp-wallet-secret
 ```
 
 - `NEXT_PUBLIC_NETWORK` may be set to `base` for mainnet or `base-sepolia` for testnet.
@@ -56,8 +52,6 @@ CDP_WALLET_SECRET=your-cdp-wallet-secret
 - `NEXT_PUBLIC_BASE_AUTO_SPEND_LIMIT` tunes the auto-spend ceiling in wei (defaults to 0.001 ETH when unset).
 - `NEXT_PUBLIC_BASE_CHECKOUT_RECIPIENT` designates the address that receives the Base Perfect Checkout payment (defaults to the invoice recipient when omitted).
 - `NEXT_PUBLIC_BASE_WALLET_URL` optionally points the Base Account SDK to a custom wallet URL (defaults to the standard Base wallet when omitted).
-- `NEXT_PUBLIC_BASE_SUBACCOUNT_FUND_WEI` controls the default amount (in wei) transferred from the signing wallet to the sub account when using the “Fund Sub Account” shortcut.
-- `CDP_API_KEY_ID`, `CDP_API_KEY_SECRET`, and `CDP_WALLET_SECRET` enable the built-in Base Sepolia faucet endpoint exposed at `POST /api/faucet`.
 
 ### Perfect Checkout
 

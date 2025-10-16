@@ -1,5 +1,5 @@
 import { type ClassValue, clsx } from 'clsx';
-import { formatEther, formatUnits } from 'viem';
+import { formatEther } from 'viem';
 import { twMerge } from 'tailwind-merge';
 
 export function cn(...inputs: ClassValue[]): string {
@@ -51,18 +51,6 @@ export function formatEthBalance(value: bigint, maximumFractionDigits = 4): stri
   const numeric = Number.parseFloat(formatEther(value));
   if (!Number.isFinite(numeric)) {
     return formatEther(value);
-  }
-  return new Intl.NumberFormat('en-US', {
-    minimumFractionDigits: 0,
-    maximumFractionDigits,
-  }).format(numeric);
-}
-
-export function formatTokenBalance(value: bigint, decimals: number, maximumFractionDigits = 4): string {
-  const formatted = formatUnits(value, decimals);
-  const numeric = Number.parseFloat(formatted);
-  if (!Number.isFinite(numeric)) {
-    return formatted;
   }
   return new Intl.NumberFormat('en-US', {
     minimumFractionDigits: 0,
