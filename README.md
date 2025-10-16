@@ -9,7 +9,7 @@ A single-page micro shop built with the Next.js App Router and Tailwind CSS. Mat
 - 🧊 Real Base Account SDK integration that provisions Sub Accounts on connect, enables auto spend permissions, and supports skipping repetitive approvals
 - 💳 Embedded Base Perfect Checkout flow that routes cart totals through Base Pay using Sub Accounts
 - 📦 Configurable metadata, paymaster routing, and Base network selection via environment variables
-- 💼 Wallet tray surfaces the connected account, signing/funder wallet, and auto-spend sub account with live balances, one-click top-ups, and faucet/manual funding shortcuts
+- 💼 Wallet tray surfaces the connected account, signing/funder wallet, and auto-spend sub account with live balances, one-click top-ups, built-in faucet requests, and manual funding shortcuts
 
 ## Getting Started
 
@@ -41,6 +41,9 @@ NEXT_PUBLIC_BASE_AUTO_SPEND_LIMIT=1000000000000000
 NEXT_PUBLIC_BASE_CHECKOUT_RECIPIENT=0xYourMerchantAddress
 NEXT_PUBLIC_BASE_WALLET_URL=https://wallet.base.org
 NEXT_PUBLIC_BASE_SUBACCOUNT_FUND_WEI=500000000000000
+CDP_API_KEY_ID=your-cdp-api-key-id
+CDP_API_KEY_SECRET=your-cdp-api-key-secret
+CDP_WALLET_SECRET=your-cdp-wallet-secret
 ```
 
 - `NEXT_PUBLIC_NETWORK` may be set to `base` for mainnet or `base-sepolia` for testnet.
@@ -54,10 +57,15 @@ NEXT_PUBLIC_BASE_SUBACCOUNT_FUND_WEI=500000000000000
 - `NEXT_PUBLIC_BASE_CHECKOUT_RECIPIENT` designates the address that receives the Base Perfect Checkout payment (defaults to the invoice recipient when omitted).
 - `NEXT_PUBLIC_BASE_WALLET_URL` optionally points the Base Account SDK to a custom wallet URL (defaults to the standard Base wallet when omitted).
 - `NEXT_PUBLIC_BASE_SUBACCOUNT_FUND_WEI` controls the default amount (in wei) transferred from the signing wallet to the sub account when using the “Fund Sub Account” shortcut.
+- `CDP_API_KEY_ID`, `CDP_API_KEY_SECRET`, and `CDP_WALLET_SECRET` are required to enable the built-in Base Sepolia faucet endpoint that funds the signing or checkout wallets.
 
 ### Perfect Checkout
 
 Mate Shop wires the cart experience into Base Perfect Checkout. After provisioning a Sub Account and settling the $0.10 invoice, the “Complete Checkout” button triggers the `pay` helper from the Base Account SDK. This launches the Base Perfect Checkout overlay, requests an Auto Spend permission if needed, and settles the cart total with USDC to the configured merchant address. Transaction hashes are surfaced back in the UI so shoppers can verify the payment.
+
+### Testnet faucet support
+
+When `NEXT_PUBLIC_NETWORK` is set to `base-sepolia`, the wallet tray surfaces a “Request faucet ETH” control for both the signing wallet and the checkout sub account. The action proxies through `POST /api/faucet`, which wraps the [Coinbase Developer Platform faucet API](https://portal.cdp.coinbase.com/). Provide your CDP API key and wallet secret via `CDP_API_KEY_ID`, `CDP_API_KEY_SECRET`, and `CDP_WALLET_SECRET` to enable the integration.
 
 ### Running Locally
 

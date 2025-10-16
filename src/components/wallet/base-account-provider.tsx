@@ -85,6 +85,24 @@ function isAddress(candidate: string | undefined): candidate is `0x${string}` {
   return candidate !== undefined && ADDRESS_PATTERN.test(candidate);
 }
 
+function normalizeAccounts(accounts: readonly string[]) {
+  return accounts.filter((candidate): candidate is `0x${string}` => isAddress(candidate));
+}
+
+function findOwnerAccount(accounts: readonly `0x${string}`[], subAccountAddress?: `0x${string}` | null) {
+  if (!accounts.length) {
+    return null;
+  }
+  if (subAccountAddress) {
+    const normalizedSubAccount = subAccountAddress.toLowerCase();
+    const ownerCandidate = accounts.find((account) => account.toLowerCase() !== normalizedSubAccount);
+    if (ownerCandidate) {
+      return ownerCandidate;
+    }
+  }
+  return accounts[0] ?? null;
+}
+
 function checkSpendPermission(entry: WalletPermission | undefined) {
   if (!entry?.permissions?.spend?.length) {
     return false;
@@ -143,6 +161,7 @@ export function BaseAccountProvider({ children }: { children: React.ReactNode })
   const [universalAddress, setUniversalAddress] = useState<string | null>(null);
   const [subAccount, setSubAccount] = useState<SubAccount | null>(null);
   const [ownerAddress, setOwnerAddress] = useState<`0x${string}` | null>(null);
+  const [connectedAccounts, setConnectedAccounts] = useState<`0x${string}`[]>([]);
   const [isConnecting, setIsConnecting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [autoSpendEnabled, setAutoSpendEnabled] = useState(false);
@@ -243,8 +262,8 @@ export function BaseAccountProvider({ children }: { children: React.ReactNode })
     }
 
     const handleAccountsChanged = (accounts: string[]) => {
-      setUniversalAddress(accounts[0] ?? null);
-      setOwnerAddress(isAddress(accounts[0]) ? accounts[0] : null);
+      const normalized = normalizeAccounts(accounts);
+      setConnectedAccounts(normalized);
     };
 
     const handleDisconnect = () => {
@@ -256,6 +275,7 @@ export function BaseAccountProvider({ children }: { children: React.ReactNode })
       setSubAccountBalance(null);
       setUniversalBalance(null);
       setBalanceError(null);
+      setConnectedAccounts([]);
     };
 
     const emitter = provider as BaseProvider & {
@@ -284,7 +304,8 @@ export function BaseAccountProvider({ children }: { children: React.ReactNode })
         const universalCandidate = isAddress(universalAddress ?? undefined)
           ? (universalAddress as `0x${string}`)
           : null;
-        await refreshBalances({ subAccount: existing.address, universal: universalCandidate });
+        const ownerCandidate = findOwnerAccount(connectedAccounts, existing.address);
+        await refreshBalances({ owner: ownerCandidate, subAccount: existing.address, universal: universalCandidate });
         return existing;
       }
     } catch (getError) {
@@ -295,12 +316,6 @@ export function BaseAccountProvider({ children }: { children: React.ReactNode })
       const { account } = await getCryptoKeyAccount();
       if (!account) {
         throw new Error('Unable to access Base account keys');
-      }
-      const ownerCandidate = isAddress((account as { address?: string }).address)
-        ? ((account as { address: `0x${string}` }).address)
-        : null;
-      if (ownerCandidate) {
-        setOwnerAddress(ownerCandidate);
       }
       const keyType = 'address' in account && account.address ? 'address' : 'webauthn-p256';
       const publicKey = (account as any).address ?? (account as any).publicKey;
@@ -320,6 +335,7 @@ export function BaseAccountProvider({ children }: { children: React.ReactNode })
       const universalCandidate = isAddress(universalAddress ?? undefined)
         ? (universalAddress as `0x${string}`)
         : null;
+      const ownerCandidate = findOwnerAccount(connectedAccounts, created.address);
       await refreshBalances({ owner: ownerCandidate, subAccount: created.address, universal: universalCandidate });
       return created;
     } catch (createError) {
@@ -327,7 +343,7 @@ export function BaseAccountProvider({ children }: { children: React.ReactNode })
       setError(createError instanceof Error ? createError.message : 'Unable to create sub account');
       return null;
     }
-  }, [refreshBalances, sdk, universalAddress]);
+  }, [connectedAccounts, refreshBalances, sdk, universalAddress]);
 
   const connect = useCallback(async () => {
     if (!provider || !sdk) return;
@@ -335,9 +351,8 @@ export function BaseAccountProvider({ children }: { children: React.ReactNode })
     setError(null);
     try {
       const accounts = (await provider.request({ method: 'eth_requestAccounts', params: [] })) as string[];
-      const primaryAccount = accounts[0] ?? null;
-      setUniversalAddress(primaryAccount);
-      setOwnerAddress(isAddress(primaryAccount ?? undefined) ? (primaryAccount as `0x${string}`) : null);
+      const normalized = normalizeAccounts(accounts);
+      setConnectedAccounts(normalized);
       await resolveSubAccount();
     } catch (connectError) {
       console.error('Failed to connect Base account', connectError);
@@ -579,6 +594,7 @@ export function BaseAccountProvider({ children }: { children: React.ReactNode })
       setSubAccountBalance(null);
       setUniversalBalance(null);
       setBalanceError(null);
+      setConnectedAccounts([]);
     }
   }, [provider]);
 
@@ -588,6 +604,18 @@ export function BaseAccountProvider({ children }: { children: React.ReactNode })
     }
     void refreshBalances();
   }, [ownerAddress, refreshBalances, subAccount?.address, universalAddress]);
+
+  useEffect(() => {
+    if (!connectedAccounts.length) {
+      setUniversalAddress(null);
+      setOwnerAddress(null);
+      return;
+    }
+    const primary = connectedAccounts[0] ?? null;
+    const owner = findOwnerAccount(connectedAccounts, subAccount?.address ?? null);
+    setUniversalAddress(primary ?? null);
+    setOwnerAddress(owner ?? null);
+  }, [connectedAccounts, subAccount?.address]);
 
   const value = useMemo<BaseAccountContextValue>(
     () => ({
