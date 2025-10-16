@@ -2,7 +2,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { createBaseAccountSDK, getCryptoKeyAccount } from '@base-org/account';
-import { encodeFunctionData } from 'viem';
+import { createPublicClient, encodeFunctionData, http } from 'viem';
 import { base, baseSepolia } from 'viem/chains';
 
 type WalletPermission = {
@@ -141,6 +141,20 @@ const invoiceRecipientAddress = process.env.NEXT_PUBLIC_BASE_INVOICE_RECIPIENT;
 const invoiceAmountHex = toHexAmount(process.env.NEXT_PUBLIC_BASE_INVOICE_WEI, 50_000_000_000_000n);
 const configuredPaymasterUrl = process.env.NEXT_PUBLIC_BASE_PAYMASTER_URL;
 const chainHex = `0x${chain.id.toString(16)}` as const;
+const defaultRpcUrl = network === 'base' ? 'https://mainnet.base.org' : 'https://sepolia.base.org';
+const rpcUrl = process.env.NEXT_PUBLIC_BASE_RPC_URL ?? defaultRpcUrl;
+
+function buildPublicClient() {
+  try {
+    return createPublicClient({
+      chain,
+      transport: http(rpcUrl),
+    });
+  } catch (clientError) {
+    console.warn('Failed to create Base RPC client', clientError);
+    return null;
+  }
+}
 
 const ERC20_BALANCE_OF_ABI = [
   {
@@ -231,6 +245,7 @@ export function BaseAccountProvider({ children }: { children: React.ReactNode })
   const [isConnecting, setIsConnecting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [autoSpendEnabled, setAutoSpendEnabled] = useState(false);
+  const [publicClient] = useState(buildPublicClient);
 
   const getFallbackFundingAddress = useCallback(
     () => firstValidAddress(universalAddress, subAccount?.address),
@@ -369,11 +384,31 @@ export function BaseAccountProvider({ children }: { children: React.ReactNode })
 
   const fetchBalance = useCallback(
     async (override?: `0x${string}` | null) => {
-      if (!provider?.request) {
-        return null;
-      }
       const accountAddress = override ?? (isAddress(fundingAddress) ? fundingAddress : null);
       if (!isAddress(accountAddress)) {
+        setSpendTokenBalance(null);
+        return null;
+      }
+
+      if (publicClient) {
+        try {
+          const balance = isAddress(spendTokenAddress)
+            ? await publicClient.readContract({
+                address: spendTokenAddress,
+                abi: ERC20_BALANCE_OF_ABI,
+                functionName: 'balanceOf',
+                args: [accountAddress],
+              })
+            : await publicClient.getBalance({ address: accountAddress });
+          setSpendTokenBalance(balance);
+          return balance;
+        } catch (rpcError) {
+          console.warn('Failed to refresh Base balance via RPC', rpcError);
+        }
+      }
+
+      if (!provider?.request) {
+        setSpendTokenBalance(null);
         return null;
       }
 
@@ -413,10 +448,11 @@ export function BaseAccountProvider({ children }: { children: React.ReactNode })
       } catch (balanceError) {
         console.warn('Failed to refresh Base balance', balanceError);
       }
+
       setSpendTokenBalance(null);
       return null;
     },
-    [fundingAddress, provider],
+    [fundingAddress, provider, publicClient],
   );
 
   const refreshBalance = useCallback(async () => {
