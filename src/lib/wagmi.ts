@@ -1,22 +1,22 @@
-'use client';
-
 import { createConfig, http } from 'wagmi';
-import { baseSepolia, base } from 'wagmi/chains';
-import { coinbaseWallet, injected } from 'wagmi/connectors';
+import { base, baseSepolia } from 'wagmi/chains';
 
-const network = process.env.NEXT_PUBLIC_NETWORK ?? 'base-sepolia';
+type SupportedNetwork = 'base' | 'base-sepolia';
+
+const network = (process.env.NEXT_PUBLIC_NETWORK as SupportedNetwork | undefined) ?? 'base-sepolia';
 const chain = network === 'base' ? base : baseSepolia;
-const rpcUrl = process.env.NEXT_PUBLIC_BASE_RPC_URL ?? chain.rpcUrls.default.http[0];
-
-const transports = {
-  [chain.id]: http(rpcUrl)
-} as Record<number, ReturnType<typeof http>>;
+const customRpcUrl = process.env.NEXT_PUBLIC_BASE_RPC_URL;
+const baseRpc = customRpcUrl && network === 'base' ? customRpcUrl : base.rpcUrls.default.http[0];
+const baseSepoliaRpc = customRpcUrl && network === 'base-sepolia' ? customRpcUrl : baseSepolia.rpcUrls.default.http[0];
 
 export const wagmiConfig = createConfig({
   chains: [chain],
-  transports,
-  connectors: [
-    injected({ shimDisconnect: true }),
-    coinbaseWallet({ appName: 'Glass Gift Shop', preference: 'smartWalletOnly' })
-  ]
+  connectors: [],
+  transports: {
+    [base.id]: http(baseRpc),
+    [baseSepolia.id]: http(baseSepoliaRpc),
+  },
 });
+
+export type WagmiConfig = typeof wagmiConfig;
+export { chain as activeChain };
