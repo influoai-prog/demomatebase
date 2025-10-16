@@ -4,158 +4,138 @@ import { useEffect, useMemo, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { useCart } from '@/lib/cart-store';
 import { createPaymentSummary } from '@/lib/payment';
-import { formatCurrency, formatTokenEstimate, truncateAddress } from '@/lib/utils';
-import { useBaseAccount } from '@/components/wallet/base-account-provider';
+import { formatCurrency, formatTokenEstimate } from '@/lib/utils';
+import { useBaseAccountSDK } from '@/lib/base-account';
 import { toast } from 'sonner';
 
-const TOKEN_PRICE_USD = 3200;
-
-type CheckoutStep = 'connect' | 'configure' | 'invoice' | 'complete';
-type ProcessingAction = CheckoutStep | null;
+const TOKEN_PRICE_USD = 3200; // mocked ETH price
 
 export function CheckoutFlow() {
-  const {
-    connect,
-    ensureSubAccount,
-    requestAutoSpend,
-    payInvoice,
-    subAccount,
-    universalAddress,
-    fundingAddress,
-    autoSpendEnabled,
-    refreshBalance,
-  } = useBaseAccount();
+  const sdk = useBaseAccountSDK();
   const lines = useCart((state) => state.lines);
   const clearCart = useCart((state) => state.clear);
+  const [isPreparing, setIsPreparing] = useState(false);
+  const [isPaying, setIsPaying] = useState(false);
   const [summary, setSummary] = useState<Awaited<ReturnType<typeof createPaymentSummary>> | null>(null);
-  const [step, setStep] = useState<CheckoutStep>('connect');
-  const [orderId, setOrderId] = useState<string | null>(null);
-  const [permissionId, setPermissionId] = useState<string | null>(null);
-  const [validUntil, setValidUntil] = useState<string | null>(null);
-  const [processing, setProcessing] = useState<ProcessingAction>(null);
+  const [status, setStatus] = useState<string>('connect');
+  const [subAccountId, setSubAccountId] = useState<string>('');
+  const [txHash, setTxHash] = useState<string>('');
+  const [orderId, setOrderId] = useState<string>('');
 
   useEffect(() => {
-    let isMounted = true;
-    createPaymentSummary(lines).then((result) => {
-      if (isMounted) {
-        setSummary(result);
-      }
-    });
-    setStep('connect');
-    setOrderId(null);
-    setPermissionId(null);
-    setValidUntil(null);
-    return () => {
-      isMounted = false;
-    };
+    createPaymentSummary(lines).then(setSummary);
   }, [lines]);
 
-  useEffect(() => {
-    if (autoSpendEnabled && step === 'configure') {
-      setStep('invoice');
-    }
-  }, [autoSpendEnabled, step]);
+  const connectWallet = async () => {
+    const provider = sdk.getProvider();
+    const accounts = (await provider.request({ method: 'eth_requestAccounts', params: [] })) as string[];
+    if (!accounts || accounts.length === 0) throw new Error('No account');
+    return accounts[0];
+  };
 
-  const cartTotals = useMemo(() => {
-    if (!summary) {
-      return null;
-    }
-    return {
-      subtotal: formatCurrency(summary.subtotalCents),
-      tax: formatCurrency(summary.taxCents),
-      total: formatCurrency(summary.totalCents),
-      buffer: formatCurrency(summary.bufferedTotal),
-      totalEstimate: formatTokenEstimate(summary.totalCents, TOKEN_PRICE_USD),
-    };
-  }, [summary]);
+  const ensureSubAccount = async () => {
+    const provider = sdk.getProvider();
+    const accounts = (await provider.request({ method: 'eth_requestAccounts', params: [] })) as string[];
+    const universal = accounts[0];
+    const existing = (await provider.request({
+      method: 'wallet_getSubAccounts',
+      params: [
+        {
+          account: universal,
+          domain: typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000'
+        }
+      ]
+    })) as { subAccounts: Array<{ address: string }> };
 
-  const runWithProcessing = async (action: ProcessingAction, callback: () => Promise<void>) => {
-    setProcessing(action);
+    if (existing?.subAccounts?.[0]) {
+      setSubAccountId(existing.subAccounts[0].address);
+      return existing.subAccounts[0].address;
+    }
+
+    const created = (await provider.request({
+      method: 'wallet_addSubAccount',
+      params: [
+        {
+          account: {
+            type: 'create'
+          }
+        }
+      ]
+    })) as { address: string };
+
+    setSubAccountId(created.address);
+    return created.address;
+  };
+
+  const prepare = async () => {
+    if (!summary) return;
     try {
-      await callback();
+      setIsPreparing(true);
+      setStatus('prepare');
+      await connectWallet();
+      const subId = await ensureSubAccount();
+      const response = await fetch('/api/checkout/prepare', {
+        method: 'POST',
+        body: JSON.stringify({
+          lines,
+          subAccountId: subId,
+          totalCents: summary.totalCents,
+          bufferedTotal: summary.bufferedTotal,
+          tokenAddress: summary.tokenAddress,
+          recipient: summary.recipient
+        }),
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      });
+      if (!response.ok) throw new Error('Failed to prepare checkout');
+      const data = (await response.json()) as {
+        orderId: string;
+        permissionId: string;
+        payPayload: { to: `0x${string}`; value: string };
+        validUntil: string;
+      };
+      setOrderId(data.orderId);
+      setStatus('ready');
+      toast.success('Spend permission configured');
+    } catch (error) {
+      console.error(error);
+      toast.error('Failed to prepare checkout');
+      setStatus('connect');
     } finally {
-      setProcessing(null);
+      setIsPreparing(false);
     }
   };
 
-  const handlePrepare = async () => {
-    if (!summary || lines.length === 0) {
-      toast.error('Add items to your cart before checking out.');
-      return;
+  const pay = async () => {
+    if (!summary) return;
+    try {
+      setIsPaying(true);
+      setStatus('paying');
+      const provider = sdk.getProvider();
+      const [, sub] = (await provider.request({ method: 'eth_requestAccounts', params: [] })) as string[];
+      const toPay = summary.recipient;
+      const tx = (await provider.request({
+        method: 'eth_sendTransaction',
+        params: [
+          {
+            from: sub ?? subAccountId,
+            to: toPay,
+            value: `0x${Math.round((summary.totalCents / 100 / TOKEN_PRICE_USD) * 1e18).toString(16)}`
+          }
+        ]
+      })) as string;
+      setTxHash(tx);
+      setStatus('complete');
+      clearCart();
+      toast.success('Payment submitted');
+    } catch (error) {
+      console.error(error);
+      toast.error('Payment failed');
+      setStatus('ready');
+    } finally {
+      setIsPaying(false);
     }
-
-    await runWithProcessing('connect', async () => {
-      try {
-        await connect();
-        const ensured = await ensureSubAccount();
-        if (!ensured) {
-          throw new Error('Unable to provision Base sub account');
-        }
-
-        const response = await fetch('/api/checkout/prepare', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            lines,
-            subAccountId: ensured.address,
-            totalCents: summary.totalCents,
-            bufferedTotal: summary.bufferedTotal,
-            tokenAddress: summary.tokenAddress,
-            recipient: summary.recipient,
-          }),
-        });
-
-        if (!response.ok) {
-          throw new Error('Failed to prepare checkout');
-        }
-
-        const data = (await response.json()) as {
-          orderId: string;
-          permissionId: string;
-          validUntil: string;
-        };
-
-        setOrderId(data.orderId);
-        setPermissionId(data.permissionId);
-        setValidUntil(data.validUntil);
-        toast.success('Base wallet connected');
-        setStep('configure');
-      } catch (error) {
-        const message = error instanceof Error ? error.message : 'Failed to prepare checkout';
-        toast.error(message);
-        setStep('connect');
-      }
-    });
-  };
-
-  const handleAutoSpend = async () => {
-    await runWithProcessing('configure', async () => {
-      try {
-        await requestAutoSpend();
-        toast.success('Auto spend ready');
-        setStep('invoice');
-      } catch (error) {
-        const message = error instanceof Error ? error.message : 'Auto spend request failed';
-        toast.error(message);
-      }
-    });
-  };
-
-  const handlePayInvoice = async () => {
-    await runWithProcessing('invoice', async () => {
-      try {
-        await payInvoice();
-        await refreshBalance();
-        toast.success('Payment submitted', {
-          description: 'Order will be added to your account shortly.',
-        });
-        clearCart();
-        setStep('complete');
-      } catch (error) {
-        const message = error instanceof Error ? error.message : 'Invoice payment failed';
-        toast.error(message);
-      }
-    });
   };
 
   if (!summary || lines.length === 0) {
@@ -167,119 +147,35 @@ export function CheckoutFlow() {
   }
 
   return (
-    <div className="glass-card flex flex-col gap-8 p-8">
+    <div className="glass-card flex flex-col gap-6 p-8">
       <div className="space-y-2">
         <h2 className="text-xl font-semibold text-white">Checkout with Base</h2>
         <p className="text-sm text-white/70">
-          Connect your Base wallet, configure auto spend, and settle the invoice powering this order.
+          A sub account will be provisioned with auto spend permissions covering your order total plus buffer.
         </p>
       </div>
-
-      <div className="grid gap-4 text-sm text-white/70 md:grid-cols-2">
-        <div className="space-y-2 rounded-3xl border border-white/10 bg-white/5 p-4">
-          <p className="text-xs uppercase tracking-[0.3em] text-white/50">Order totals</p>
-          <div className="flex items-center justify-between">
-            <span>Subtotal</span>
-            <span className="font-semibold text-white">{cartTotals?.subtotal}</span>
-          </div>
-          <div className="flex items-center justify-between">
-            <span>Estimated tax</span>
-            <span className="font-semibold text-white/80">{cartTotals?.tax}</span>
-          </div>
-          <div className="flex items-center justify-between text-base font-semibold text-white">
-            <span>Total</span>
-            <span>{cartTotals?.total}</span>
-          </div>
-          <p className="text-xs text-white/60">~{cartTotals?.totalEstimate} ETH with a 5% buffer to cover gas.</p>
-          <p className="text-xs text-white/60">Buffer authorization: {cartTotals?.buffer}</p>
-        </div>
-        <div className="space-y-2 rounded-3xl border border-white/10 bg-white/5 p-4">
-          <p className="text-xs uppercase tracking-[0.3em] text-white/50">Wallet state</p>
-          <div className="space-y-1 text-xs">
-            <p>
-              Connected wallet:{' '}
-              <span className="font-semibold text-white">
-                {universalAddress ? truncateAddress(universalAddress) : 'Not connected'}
-              </span>
-            </p>
-            <p>
-              Funding account:{' '}
-              <span className="font-semibold text-white">
-                {fundingAddress ? truncateAddress(fundingAddress) : 'Awaiting deposit'}
-              </span>
-            </p>
-            <p>
-              Sub account:{' '}
-              <span className="font-semibold text-white">
-                {subAccount?.address ? truncateAddress(subAccount.address) : 'Needs provisioning'}
-              </span>
-            </p>
-            {permissionId && <p className="text-white/60">Auto spend permission: {permissionId}</p>}
-            {validUntil && <p className="text-white/60">Valid until: {new Date(validUntil).toLocaleString()}</p>}
-          </div>
-        </div>
+      <div className="flex flex-col gap-3 text-sm text-white/70">
+        <p>
+          Cart total <span className="font-semibold text-white">{formatCurrency(summary.totalCents)}</span> (~
+          {formatTokenEstimate(summary.totalCents, TOKEN_PRICE_USD)} ETH)
+        </p>
+        <p>
+          Auto spend buffer adds 5%: {formatCurrency(summary.bufferedTotal)} maximum authorization.
+        </p>
       </div>
-
-      <div className="grid gap-4 md:grid-cols-3">
-        <div className="space-y-3 rounded-3xl border border-white/10 bg-white/5 p-4">
-          <div>
-            <p className="text-xs uppercase tracking-[0.3em] text-white/50">Step 1</p>
-            <h3 className="text-sm font-semibold text-white">Connect Base wallet</h3>
-            <p className="mt-1 text-xs text-white/60">
-              We will reuse your universal account as the funding wallet for deposits and spend permissions.
-            </p>
-          </div>
-          <Button
-            onClick={handlePrepare}
-            disabled={processing !== null || step !== 'connect'}
-            className="w-full rounded-full"
-          >
-            {processing === 'connect' ? 'Connecting…' : step === 'configure' ? 'Connected' : 'Connect wallet'}
-          </Button>
-        </div>
-        <div className="space-y-3 rounded-3xl border border-white/10 bg-white/5 p-4">
-          <div>
-            <p className="text-xs uppercase tracking-[0.3em] text-white/50">Step 2</p>
-            <h3 className="text-sm font-semibold text-white">Authorize auto spend</h3>
-            <p className="mt-1 text-xs text-white/60">
-              Grant a daily spend limit so invoices can settle without additional prompts.
-            </p>
-          </div>
-          <Button
-            onClick={handleAutoSpend}
-            disabled={processing !== null || step !== 'configure'}
-            className="w-full rounded-full"
-          >
-            {autoSpendEnabled || step === 'invoice'
-              ? 'Auto spend ready'
-              : processing === 'configure'
-                ? 'Requesting…'
-                : 'Request auto spend'}
-          </Button>
-        </div>
-        <div className="space-y-3 rounded-3xl border border-white/10 bg-white/5 p-4">
-          <div>
-            <p className="text-xs uppercase tracking-[0.3em] text-white/50">Step 3</p>
-            <h3 className="text-sm font-semibold text-white">Pay Base invoice</h3>
-            <p className="mt-1 text-xs text-white/60">Use your funding wallet balance to settle the $0.10 invoice.</p>
-          </div>
-          <Button
-            onClick={handlePayInvoice}
-            disabled={processing !== null || step !== 'invoice'}
-            className="w-full rounded-full"
-          >
-            {processing === 'invoice' ? 'Paying…' : 'Pay invoice'}
-          </Button>
-        </div>
+      <div className="flex flex-col gap-3">
+        <Button onClick={prepare} disabled={isPreparing || status === 'ready' || status === 'complete'}>
+          {status === 'prepare' || isPreparing ? 'Preparing permissions…' : 'Configure Auto Spend'}
+        </Button>
+        <Button onClick={pay} disabled={status !== 'ready' || isPaying}>
+          {isPaying ? 'Paying…' : 'Pay with Base'}
+        </Button>
       </div>
-
-      {step === 'complete' && (
-        <div className="rounded-3xl border border-emerald-400/30 bg-emerald-500/10 p-6 text-sm text-emerald-100">
+      {status === 'complete' && (
+        <div className="rounded-3xl border border-white/20 bg-white/10 p-6 text-sm text-white/70">
           <p className="font-semibold text-white">Order confirmed</p>
-          {orderId && <p className="mt-2 text-emerald-50">Order ID: {orderId}</p>}
-          <p className="mt-3 text-emerald-50">
-            Your Base invoice is settled. Orders will appear in your account shortly.
-          </p>
+          <p className="mt-2">Order ID: {orderId}</p>
+          <p className="mt-1 break-all">Transaction hash: {txHash}</p>
         </div>
       )}
     </div>

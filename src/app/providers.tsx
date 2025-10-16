@@ -1,7 +1,13 @@
 'use client';
 
-import { BaseAccountProvider } from '@/components/wallet/base-account-provider';
+import { WagmiConfig } from 'wagmi';
+import { wagmiConfig } from '@/lib/wagmi';
+import { BaseAccountProvider } from '@/lib/base-account';
 
 export function Providers({ children }: { children: React.ReactNode }) {
-  return <BaseAccountProvider>{children}</BaseAccountProvider>;
+  return (
+    <WagmiConfig config={wagmiConfig}>
+      <BaseAccountProvider>{children}</BaseAccountProvider>
+    </WagmiConfig>
+  );
 }

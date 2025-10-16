@@ -1,6 +1,6 @@
-# Mate Shop
+# Glass Gift Shop
 
-Mate Shop is a glassmorphism-inspired gift shop built with the Next.js App Router and Tailwind CSS that now talks directly to the real `@base-org/account` SDK. Shoppers browse luminous clothing, food, gifts, and an age-gated erotic collection, then settle a live Base invoice that keeps their sub account active before completing checkout.
+A glassmorphism-inspired gift shop built with Next.js App Router, Tailwind CSS, and Base Account SDK. The catalog spans clothing, food, luminous gifts, and an age-gated erotic collection. Checkout provisions Base Sub Accounts, configures Auto Spend permissions, and simulates on-chain payment on Base Sepolia.
 
 ## Features
 
@@ -8,8 +8,8 @@ Mate Shop is a glassmorphism-inspired gift shop built with the Next.js App Route
 - 🛍️ Filterable, searchable product catalog with 24 seeded items across four categories
 - 🛒 Persistent cart using Zustand with quantity management and inline cart math
 - 🔐 Erotic collection protected by an 18+ confirmation gate stored in cookies
-- 🔗 Real Base Account SDK integration with sub account creation, auto spend permissions, and invoice settlement
-- 💸 Drawer-based checkout that requires a live $0.10 Base invoice before confirming the order
+- 🔗 Base Account SDK integration with Sub Account creation and auto spend configuration
+- 💸 Demo checkout flow that simulates Base Sepolia payment payloads
 - 🧪 Vitest unit tests and Playwright smoke test
 
 ## Getting Started
@@ -31,27 +31,18 @@ Create a `.env.local` file in the project root:
 
 ```env
 NEXT_PUBLIC_NETWORK=base-sepolia
-NEXT_PUBLIC_BASE_APP_NAME=Mate Shop
-NEXT_PUBLIC_BASE_APP_LOGO=https://mate-shop.vercel.app/icon.png
-NEXT_PUBLIC_BASE_AUTO_SPEND_LIMIT=1000000000000000
-NEXT_PUBLIC_BASE_AUTO_SPEND_TOKEN=0x036cbd53842c5426634e7929541ec2318f3dcf7e
-NEXT_PUBLIC_BASE_AUTO_SPEND_TOKEN_DECIMALS=6
-NEXT_PUBLIC_BASE_INVOICE_RECIPIENT=0x5d5b47Fb9137E8ffFD9472A5480C219c2B33Ff22
-NEXT_PUBLIC_BASE_INVOICE_WEI=50000000000000
+BASE_API_KEY=YOUR_KEY
+BASE_APP_ID=your_app_id
+NEXT_PUBLIC_BASE_RPC_URL=https://sepolia.base.org
 NEXT_PUBLIC_BASE_PAYMASTER_URL=https://your-paymaster.example
-NEXT_PUBLIC_BASE_FAUCET_THRESHOLD=0.25
-CDP_API_KEY_ID=your-api-key-id
-CDP_API_KEY_SECRET=your-api-key-secret
-CDP_WALLET_SECRET=your-wallet-secret
+NEXT_PUBLIC_PAYMENT_RECIPIENT=0x5d5b47Fb9137E8ffFD9472A5480C219c2B33Ff22
+NEXT_PUBLIC_PAYMENT_TOKEN=0x0000000000000000000000000000000000000000
 ```
 
 - `NEXT_PUBLIC_NETWORK` toggles Base Sepolia (`base-sepolia`) or Base mainnet (`base`).
-- `NEXT_PUBLIC_BASE_APP_NAME` and `NEXT_PUBLIC_BASE_APP_LOGO` control the wallet modal branding.
-- `NEXT_PUBLIC_BASE_AUTO_SPEND_*` configure the spend permission token, decimals, and maximum allowance.
-- `NEXT_PUBLIC_BASE_INVOICE_*` configure the invoice destination and minimum amount (in wei) that must be paid before checkout.
-- `NEXT_PUBLIC_BASE_PAYMASTER_URL` is optional if you are sponsoring gas via a paymaster.
-- `NEXT_PUBLIC_BASE_FAUCET_THRESHOLD` caps how much USDC a wallet can hold before the built-in faucet becomes unavailable.
-- `CDP_API_*` and `CDP_WALLET_SECRET` are required to enable the Base Sepolia USDC faucet powered by the Coinbase Developer Platform. Leave them unset to hide the on-chain funding shortcut.
+- `NEXT_PUBLIC_BASE_RPC_URL` should target the appropriate Base RPC endpoint.
+- `NEXT_PUBLIC_BASE_PAYMASTER_URL` is optional if sponsoring gas.
+- `NEXT_PUBLIC_PAYMENT_RECIPIENT` and `NEXT_PUBLIC_PAYMENT_TOKEN` define the store contract/address and settlement token.
 
 ### Running Locally
 
@@ -60,17 +51,6 @@ npm run dev
 ```
 
 Visit `http://localhost:3000` to explore the storefront.
-
-### Running Online (Codespaces/Gitpod)
-
-You can run the project entirely in the cloud without any local setup:
-
-1. Fork this repository.
-2. Launch a new [GitHub Codespace](https://docs.github.com/en/codespaces/getting-started/quickstart) or open the repo in [Gitpod](https://gitpod.io/).
-3. In the online terminal, run `npm install` followed by `npm run dev -- --hostname 0.0.0.0`.
-4. Use the forwarded port (typically `3000`) in the web IDE preview to access the storefront.
-
-> ℹ️ Install the Base Smart Wallet browser extension in your Codespace or Gitpod session so you can approve invoice and checkout requests.
 
 ### Switching Networks
 
@@ -84,15 +64,14 @@ Products are stored in `src/data/products.ts`. Adjust or expand the array to see
 ### Funding Test Wallets
 
 1. Install Coinbase Smart Wallet or connect a wallet that supports Base.
-2. Use the **Fund Wallet** dialog to copy your deposit address, request Base Sepolia USDC via the built-in faucet (requires CDP credentials), or jump to the public faucet docs.
+2. Fund the universal account with Base Sepolia ETH using the [Base Sepolia faucet](https://docs.base.org/tools/network-faucets).
 3. Connect in the checkout flow; the app provisions a Sub Account and requests auto spend permissions for the buffered order total.
 
 ### Simulating Purchases
 
-1. Add items to the cart and open the drawer from the navbar.
-2. Click **Base Wallet** to connect your universal account.
-3. Click **Configure Auto Spend** to provision a sub account and approve the buffered spend limit.
-4. Approve the $0.10 Base invoice, then select **Complete Checkout** to send the order confirmation call.
+1. Add items to the cart and proceed to `/checkout`.
+2. Click **Configure Auto Spend** to trigger Sub Account creation and spend permission configuration. The server responds with a mocked payload representing the authorization window and buffer.
+3. Click **Pay with Base** to send a simulated transaction using the Sub Account address. The UI displays the generated order ID and transaction hash placeholder.
 
 ### Running Tests
 
