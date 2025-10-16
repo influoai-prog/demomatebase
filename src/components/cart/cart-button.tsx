@@ -54,10 +54,7 @@ export function CartButton() {
       if (!ensured) {
         throw new Error('Unable to provision Base sub account');
       }
-      const granted = await requestAutoSpend();
-      if (!granted) {
-        throw new Error('Auto spend permissions not available');
-      }
+      await requestAutoSpend();
       setInvoicePaid(true);
       toast.success('Base invoice settled. You can finish checkout now.');
     } catch (invoiceError) {
@@ -185,7 +182,7 @@ export function CartButton() {
               </p>
               <Button
                 size="sm"
-                className="w-full rounded-full border border-sky-400/30 bg-sky-500/20 text-xs font-semibold uppercase tracking-[0.3em] text-white hover:bg-sky-500/30"
+                className="w-full rounded-full border border-sky-400/30 bg-sky-500/20 text-[0.72rem] font-semibold uppercase tracking-[0.24em] text-white hover:bg-sky-500/30"
                 onClick={handlePayInvoice}
                 disabled={isPayingInvoice || isConnecting}
               >
@@ -202,7 +199,7 @@ export function CartButton() {
             )}
             <Button
               size="lg"
-              className="w-full rounded-full border border-sky-400/40 bg-sky-500/20 text-base font-semibold text-white hover:bg-sky-500/30"
+              className="w-full rounded-full border border-sky-400/40 bg-sky-500/20 text-[0.82rem] font-semibold uppercase tracking-[0.22em] text-white hover:bg-sky-500/30"
               onClick={handleCheckout}
               disabled={isCheckingOut || isConnecting || !invoicePaid}
             >

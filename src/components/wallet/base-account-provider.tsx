@@ -4,6 +4,12 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState } 
 import { createBaseAccountSDK, getCryptoKeyAccount } from '@base-org/account';
 import { base, baseSepolia } from 'viem/chains';
 
+type WalletPermission = {
+  permissions?: {
+    spend?: Array<{ limit: string }>;
+  };
+};
+
 type SubAccount = {
   address: `0x${string}`;
   chainId?: `0x${string}`;
@@ -32,6 +38,39 @@ const BaseAccountContext = createContext<BaseAccountContextValue | null>(null);
 
 const network = (process.env.NEXT_PUBLIC_NETWORK as 'base' | 'base-sepolia' | undefined) ?? 'base-sepolia';
 const chain = network === 'base' ? base : baseSepolia;
+
+const HEX_PATTERN = /^0x[0-9a-fA-F]+$/;
+const ADDRESS_PATTERN = /^0x[a-fA-F0-9]{40}$/;
+
+function toHexAmount(value: string | undefined, fallback: bigint) {
+  if (!value) {
+    return `0x${fallback.toString(16)}`;
+  }
+  const trimmed = value.trim();
+  if (HEX_PATTERN.test(trimmed)) {
+    return trimmed;
+  }
+  try {
+    return `0x${BigInt(trimmed).toString(16)}`;
+  } catch {
+    return `0x${fallback.toString(16)}`;
+  }
+}
+
+function isAddress(candidate: string | undefined): candidate is `0x${string}` {
+  return candidate !== undefined && ADDRESS_PATTERN.test(candidate);
+}
+
+function checkSpendPermission(entry: WalletPermission | undefined) {
+  if (!entry?.permissions?.spend?.length) {
+    return false;
+  }
+  return entry.permissions.spend.some((permission) => Boolean(permission.limit));
+}
+
+const spendLimitHex = toHexAmount(process.env.NEXT_PUBLIC_BASE_AUTO_SPEND_LIMIT, 10n ** 15n);
+const spendTokenAddress = process.env.NEXT_PUBLIC_BASE_AUTO_SPEND_TOKEN;
+const invoiceRecipientAddress = process.env.NEXT_PUBLIC_BASE_INVOICE_RECIPIENT;
 
 function buildSdk() {
   const paymasterUrl = process.env.NEXT_PUBLIC_BASE_PAYMASTER_URL;
@@ -167,18 +206,62 @@ export function BaseAccountProvider({ children }: { children: React.ReactNode })
   const requestAutoSpend = useCallback(async () => {
     const ensured = await ensureSubAccount();
     if (!ensured || !provider) {
-      return false;
+      throw new Error('Unable to access Base sub account');
+    }
+    if (!provider.request) {
+      const message = 'Base provider unavailable for auto spend requests.';
+      setAutoSpendEnabled(false);
+      setError(message);
+      throw new Error(message);
     }
     try {
       setError(null);
-      await provider.request?.({ method: 'wallet_grantPermissions', params: [] });
+      const existing = (await provider.request?.({
+        method: 'wallet_getPermissions',
+        params: [{ address: ensured.address, chainIds: [chain.id] }],
+      })) as WalletPermission[] | undefined;
+
+      if (Array.isArray(existing) && existing.some((entry) => checkSpendPermission(entry))) {
+        setAutoSpendEnabled(true);
+        return true;
+      }
+
+      const destination = isAddress(invoiceRecipientAddress) ? invoiceRecipientAddress : ensured.address;
+      const spendConfig: { limit: string; period: 'minute' | 'hour' | 'day' | 'week' | 'month' | 'year'; token?: `0x${string}` } = {
+        limit: spendLimitHex,
+        period: 'day',
+      };
+
+      if (isAddress(spendTokenAddress)) {
+        spendConfig.token = spendTokenAddress;
+      }
+
+      const params = {
+        address: ensured.address,
+        chainId: chain.id,
+        expiry: 60 * 60 * 24 * 30,
+        feeToken: null,
+        permissions: {
+          calls: [{ to: destination }],
+          spend: [spendConfig],
+        },
+      };
+
+      await provider.request?.({
+        method: 'wallet_grantPermissions',
+        params: [params],
+      });
       setAutoSpendEnabled(true);
       return true;
     } catch (grantError) {
       console.warn('Auto spend permission request failed', grantError);
       setAutoSpendEnabled(false);
-      setError(grantError instanceof Error ? grantError.message : 'Auto spend request failed');
-      return false;
+      const fallback = grantError instanceof Error ? grantError.message : 'Auto spend request failed';
+      const message = fallback.includes('Unsupported method')
+        ? 'Your Base wallet version does not yet support auto spend permissions.'
+        : fallback;
+      setError(message);
+      throw new Error(message);
     }
   }, [ensureSubAccount, provider, setError]);
 
