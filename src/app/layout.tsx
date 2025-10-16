@@ -9,9 +9,9 @@ import { Providers } from './providers';
 const inter = Inter({ subsets: ['latin'] });
 
 export const metadata: Metadata = {
-  title: 'Glass Gift Shop',
-  description: 'Ultra-minimal glassmorphism gift shop with on-chain checkout via Base.',
-  metadataBase: new URL('https://glass-gift-shop.local'),
+  title: 'Mate Shop',
+  description: 'Mate Shop showcases Base-powered gifting experiences with automated spend permissions.',
+  metadataBase: new URL('https://mate-shop.local'),
   icons: [{ url: '/favicon.ico' }]
 };
 

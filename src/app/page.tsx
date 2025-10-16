@@ -1,43 +1,20 @@
 import Link from 'next/link';
 import { listProducts } from '@/lib/product-service';
 import { ProductCard } from '@/components/product/product-card';
-import { Button } from '@/components/ui/button';
 
 export default async function HomePage() {
   const featured = (await listProducts({ sort: 'popularity' })).slice(0, 6);
 
   return (
     <div className="space-y-16">
-      <section className="glass-card relative overflow-hidden px-8 py-16 md:px-16">
-        <div className="absolute inset-0 bg-gradient-to-br from-white/10 via-transparent to-white/5" aria-hidden />
-        <div className="relative z-10 flex flex-col gap-8">
-          <p className="text-xs uppercase tracking-[0.4em] text-white/70">On-Chain Curated</p>
-          <h1 className="max-w-2xl text-4xl font-semibold tracking-tight text-white md:text-5xl">
-            Glass Gift Shop
-          </h1>
-          <p className="max-w-2xl text-lg text-white/70">
-            Ultra-minimal gifts with luminous line art, curated for clothing, food, and intimate moments.
-            Checkout flows through Base with automated sub accounts and spend permissions.
+      <section className="space-y-6">
+        <div className="space-y-3">
+          <p className="text-xs uppercase tracking-[0.4em] text-white/60">On-Chain Curated</p>
+          <h1 className="text-4xl font-semibold tracking-tight text-white md:text-5xl">Mate Shop</h1>
+          <p className="max-w-2xl text-base text-white/70">
+            Discover Base-powered gifting experiences built on sub-accounts, live balances, and automated spend
+            permissions.
           </p>
-          <div className="flex flex-wrap gap-3">
-            {['Clothing', 'Food', 'Gifts', 'Erotic'].map((category) => (
-              <Link
-                key={category}
-                href={category === 'Erotic' ? '/legal/erotic-gate' : `/shop?category=${category}`}
-                className="glass-button"
-              >
-                {category}
-              </Link>
-            ))}
-          </div>
-          <div className="flex gap-3">
-            <Button asChild className="rounded-full px-8">
-              <Link href="/shop">Browse All</Link>
-            </Button>
-            <Button asChild variant="outline" className="rounded-full px-8">
-              <Link href="/checkout">Checkout Demo</Link>
-            </Button>
-          </div>
         </div>
       </section>
 

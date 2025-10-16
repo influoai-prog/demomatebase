@@ -1,6 +1,6 @@
-# Glass Gift Shop
+# Mate Shop
 
-A glassmorphism-inspired gift shop built with the Next.js App Router and Tailwind CSS that now talks directly to the real `@base-org/account` SDK. Shoppers browse luminous clothing, food, gifts, and an age-gated erotic collection, then settle a live Base invoice that keeps their sub account active before completing checkout.
+Mate Shop is a glassmorphism-inspired gift shop built with the Next.js App Router and Tailwind CSS that now talks directly to the real `@base-org/account` SDK. Shoppers browse luminous clothing, food, gifts, and an age-gated erotic collection, then settle a live Base invoice that keeps their sub account active before completing checkout.
 
 ## Features
 

@@ -4,8 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Loader2, LogOut, Sparkles, Wallet2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useBaseAccount } from './base-account-provider';
-import { truncateAddress } from '@/lib/utils';
-import { formatUnits } from 'viem';
+import { formatTokenBalance, truncateAddress } from '@/lib/utils';
 
 export function ConnectWalletButton() {
   const {
@@ -70,24 +69,10 @@ export function ConnectWalletButton() {
     }
   }, [menuOpen, refreshBalance]);
 
-  const formattedBalance = useMemo(() => {
-    if (spendTokenBalance === null) {
-      return null;
-    }
-    try {
-      const decimalsToDisplay = Math.max(2, Math.min(4, spendTokenDecimals));
-      const balanceNumber = Number(formatUnits(spendTokenBalance, spendTokenDecimals));
-      if (!Number.isFinite(balanceNumber)) {
-        return null;
-      }
-      return `${balanceNumber.toLocaleString('en-US', {
-        minimumFractionDigits: decimalsToDisplay,
-        maximumFractionDigits: decimalsToDisplay,
-      })} USDC`;
-    } catch {
-      return null;
-    }
-  }, [spendTokenBalance, spendTokenDecimals]);
+  const formattedBalance = useMemo(
+    () => formatTokenBalance(spendTokenBalance, spendTokenDecimals),
+    [spendTokenBalance, spendTokenDecimals],
+  );
 
   return (
     <div className="relative">

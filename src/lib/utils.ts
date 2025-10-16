@@ -1,4 +1,5 @@
 import { type ClassValue, clsx } from 'clsx';
+import { formatUnits } from 'viem';
 import { twMerge } from 'tailwind-merge';
 
 export function cn(...inputs: ClassValue[]): string {
@@ -34,4 +35,27 @@ export function truncateAddress(address: string, size = 4) {
     return address;
   }
   return `${address.slice(0, size + 2)}…${address.slice(-size)}`;
+}
+
+export function formatTokenBalance(
+  balance: bigint | null,
+  decimals: number,
+  symbol = 'USDC',
+): string | null {
+  if (balance === null) {
+    return null;
+  }
+  try {
+    const decimalsToDisplay = Math.max(2, Math.min(4, decimals));
+    const value = Number(formatUnits(balance, decimals));
+    if (!Number.isFinite(value)) {
+      return null;
+    }
+    return `${value.toLocaleString('en-US', {
+      minimumFractionDigits: decimalsToDisplay,
+      maximumFractionDigits: decimalsToDisplay,
+    })} ${symbol}`;
+  } catch {
+    return null;
+  }
 }
