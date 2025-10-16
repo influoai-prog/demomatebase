@@ -13,6 +13,9 @@ import {
 } from '@/components/ui/dialog';
 import { useBaseAccount } from './base-account-provider';
 import { formatTokenBalance, truncateAddress } from '@/lib/utils';
+import { FAUCET_BALANCE_THRESHOLD } from '@/lib/faucet';
+import { formatUnits } from 'viem';
+import { toast } from 'sonner';
 
 const FUND_HELP_URL =
   process.env.NEXT_PUBLIC_BASE_FAUCET_URL ?? 'https://docs.base.org/tools/network-faucets';
@@ -27,6 +30,8 @@ export function FundWalletButton() {
   } = useBaseAccount();
   const [open, setOpen] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [isFunding, setIsFunding] = useState(false);
+  const [faucetError, setFaucetError] = useState<string | null>(null);
 
   const formattedBalance = useMemo(
     () => formatTokenBalance(spendTokenBalance, spendTokenDecimals) ?? '—',
@@ -36,6 +41,7 @@ export function FundWalletButton() {
   useEffect(() => {
     if (!open) {
       setCopied(false);
+      setFaucetError(null);
       return;
     }
     void refreshBalance();
@@ -59,7 +65,61 @@ export function FundWalletButton() {
     }
   };
 
+  const handleFaucet = async () => {
+    const addressToFund = fundingAddress ?? universalAddress;
+    if (!addressToFund) {
+      toast.error('Connect your Base wallet to request funds.');
+      return;
+    }
+    setIsFunding(true);
+    setFaucetError(null);
+    const loadingId = toast.loading('Requesting testnet USDC…');
+    try {
+      const response = await fetch('/api/faucet', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ address: addressToFund }),
+      });
+
+      const payload = (await response.json().catch(() => ({}))) as {
+        error?: string;
+        reason?: string;
+        explorerUrl?: string;
+      };
+
+      if (!response.ok) {
+        const message = payload.error ?? 'Unable to request faucet funds.';
+        setFaucetError(payload.reason ?? message);
+        throw new Error(message);
+      }
+
+      toast.dismiss(loadingId);
+      toast.success('USDC sent to your wallet!', {
+        description: payload.explorerUrl ? `View on BaseScan: ${payload.explorerUrl}` : 'Refresh balance after a moment.',
+      });
+      await refreshBalance();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unable to request faucet funds.';
+      toast.dismiss(loadingId);
+      toast.error(message);
+    } finally {
+      setIsFunding(false);
+    }
+  };
+
   const displayAddress = fundingAddress ?? universalAddress ?? '';
+  const numericBalance = useMemo(() => {
+    if (spendTokenBalance === null) {
+      return null;
+    }
+    try {
+      return Number(formatUnits(spendTokenBalance, spendTokenDecimals));
+    } catch {
+      return null;
+    }
+  }, [spendTokenBalance, spendTokenDecimals]);
+
+  const canUseFaucet = Boolean(displayAddress) && (numericBalance === null || numericBalance < FAUCET_BALANCE_THRESHOLD);
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -125,6 +185,23 @@ export function FundWalletButton() {
             >
               <RefreshCcw className="h-3 w-3" /> Refresh balance
             </Button>
+            {canUseFaucet ? (
+              <Button
+                type="button"
+                size="sm"
+                className="w-full gap-2 rounded-full bg-sky-500/90 text-xs font-semibold uppercase tracking-[0.3em] text-white shadow-[0_10px_40px_-20px_rgba(56,189,248,0.8)] hover:bg-sky-400"
+                onClick={handleFaucet}
+                disabled={isFunding}
+              >
+                {isFunding ? 'Requesting…' : 'Request testnet USDC'}
+              </Button>
+            ) : (
+              <p className="text-xs text-white/60">
+                Faucet available for balances below {FAUCET_BALANCE_THRESHOLD} USDC. Current balance{' '}
+                {numericBalance?.toFixed(2) ?? '0.00'} USDC.
+              </p>
+            )}
+            {faucetError && <p className="text-xs text-red-300">{faucetError}</p>}
           </div>
         </div>
       </DialogContent>

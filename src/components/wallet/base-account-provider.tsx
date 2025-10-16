@@ -129,7 +129,14 @@ function checkSpendPermission(entry: WalletPermission | undefined) {
 }
 
 const spendLimitHex = toHexAmount(process.env.NEXT_PUBLIC_BASE_AUTO_SPEND_LIMIT, 10n ** 15n);
-const spendTokenAddress = process.env.NEXT_PUBLIC_BASE_AUTO_SPEND_TOKEN;
+const defaultSpendTokenAddress = (
+  network === 'base'
+    ? '0x833589fCD6eDb6E08f4c7C32D4f41d6E548150d9'
+    : '0x036cbd53842c5426634e7929541ec2318f3dcf7e'
+) as `0x${string}`;
+
+const spendTokenAddress =
+  (process.env.NEXT_PUBLIC_BASE_AUTO_SPEND_TOKEN as `0x${string}` | undefined) ?? defaultSpendTokenAddress;
 const parsedSpendTokenDecimals = Number.parseInt(
   process.env.NEXT_PUBLIC_BASE_AUTO_SPEND_TOKEN_DECIMALS ?? '6',
   10,
@@ -166,59 +173,6 @@ const ERC20_BALANCE_OF_ABI = [
   },
 ] as const;
 
-function extractFundingAddressFromCapabilities(value: unknown): `0x${string}` | null {
-  if (!value || typeof value !== 'object') {
-    return null;
-  }
-  const record = value as Record<string, unknown>;
-  const direct = pickAddress(record);
-  if (direct) {
-    return direct;
-  }
-
-  const chainKeys = new Set([
-    chainHex,
-    `0x${chain.id.toString(16)}` as const,
-    chain.id.toString(),
-  ]);
-  for (const [key, entry] of Object.entries(record)) {
-    if (!chainKeys.has(key)) {
-      continue;
-    }
-    if (!entry || typeof entry !== 'object') {
-      continue;
-    }
-    const chainEntry = entry as Record<string, unknown>;
-    const fundingCapability = chainEntry.funding;
-    const fundingAddress = pickAddress(fundingCapability);
-    if (fundingAddress) {
-      return fundingAddress;
-    }
-
-    const subAccounts = chainEntry.subAccounts;
-    if (subAccounts) {
-      const subAccountAddress = pickAddress(subAccounts);
-      if (subAccountAddress) {
-        return subAccountAddress;
-      }
-    }
-
-    const nestedAddress = pickAddress(chainEntry);
-    if (nestedAddress) {
-      return nestedAddress;
-    }
-  }
-
-  for (const entry of Object.values(record)) {
-    const nestedAddress = pickAddress(entry);
-    if (nestedAddress) {
-      return nestedAddress;
-    }
-  }
-
-  return null;
-}
-
 function buildSdk() {
   const paymasterUrl = process.env.NEXT_PUBLIC_BASE_PAYMASTER_URL;
   const sdk = createBaseAccountSDK({
@@ -252,82 +206,11 @@ export function BaseAccountProvider({ children }: { children: React.ReactNode })
     [subAccount?.address, universalAddress],
   );
 
-  const hydrateFundingAddress = useCallback(
-    async ({ force = false }: { force?: boolean } = {}) => {
-      const fallback = getFallbackFundingAddress();
-      const sdkWithAccount =
-        sdk && (sdk as unknown as { account?: { get?: () => { accounts?: unknown; capabilities?: unknown } } });
-      const accountState = sdkWithAccount?.account?.get ? sdkWithAccount.account.get() : null;
-      const storedCandidate = extractFundingAddressFromCapabilities(accountState?.capabilities);
-      if (storedCandidate) {
-        setFundingAddress(storedCandidate);
-        return storedCandidate;
-      }
-
-      if (!provider?.request) {
-        setFundingAddress(fallback);
-        return fallback;
-      }
-
-      const accountForCapabilities = ((): `0x${string}` | null => {
-        if (isAddress(universalAddress)) {
-          return universalAddress;
-        }
-        if (Array.isArray(accountState?.accounts)) {
-          for (const entry of accountState.accounts) {
-            if (isAddress(entry as string)) {
-              return entry as `0x${string}`;
-            }
-          }
-        }
-        if (isAddress(fallback)) {
-          return fallback;
-        }
-        return null;
-      })();
-
-      if (!force && !accountForCapabilities) {
-        setFundingAddress(fallback);
-        return fallback;
-      }
-
-      if (!accountForCapabilities) {
-        setFundingAddress(fallback);
-        return fallback;
-      }
-
-      try {
-        const capabilities = (await provider.request({
-          method: 'wallet_getCapabilities',
-          params: [accountForCapabilities, [chainHex]],
-        })) as Record<string, unknown> | null | undefined;
-        const accountsFromState = Array.isArray(accountState?.accounts)
-          ? (accountState.accounts as Array<unknown>).filter((entry): entry is `0x${string}` =>
-              isAddress(typeof entry === 'string' ? entry : undefined),
-            )
-          : [];
-
-        const candidate = firstValidAddress(
-          extractFundingAddressFromCapabilities(capabilities),
-          ...accountsFromState.filter((entry) => !addressesEqual(entry, subAccount?.address)),
-          fallback,
-        );
-        setFundingAddress(candidate);
-        return candidate;
-      } catch (addressError) {
-        console.warn('Failed to resolve Base funding address', addressError);
-        setFundingAddress(fallback);
-        return fallback;
-      }
-    },
-    [
-      getFallbackFundingAddress,
-      provider,
-      sdk,
-      subAccount?.address,
-      universalAddress,
-    ],
-  );
+  const hydrateFundingAddress = useCallback(async () => {
+    const fallback = getFallbackFundingAddress();
+    setFundingAddress(fallback);
+    return fallback;
+  }, [getFallbackFundingAddress]);
 
   useEffect(() => {
     if (typeof window === 'undefined') {
@@ -335,52 +218,6 @@ export function BaseAccountProvider({ children }: { children: React.ReactNode })
     }
     setSdk(buildSdk());
   }, []);
-
-  useEffect(() => {
-    if (!provider) {
-      setFundingAddress(null);
-      return;
-    }
-    if (!universalAddress) {
-      return;
-    }
-    void hydrateFundingAddress();
-  }, [hydrateFundingAddress, provider, universalAddress]);
-
-  useEffect(() => {
-    if (!provider) {
-      return;
-    }
-
-    const handleAccountsChanged = (accounts: string[]) => {
-      const knownSubAddress = subAccount?.address ?? null;
-      const nextUniversal =
-        accounts.find((account) => !addressesEqual(account, knownSubAddress)) ?? accounts[0] ?? null;
-      setUniversalAddress(nextUniversal);
-      void hydrateFundingAddress({ force: true });
-    };
-
-    const handleDisconnect = () => {
-      setUniversalAddress(null);
-      setSubAccount(null);
-      setFundingAddress(null);
-      setSpendTokenBalance(null);
-      setAutoSpendEnabled(false);
-    };
-
-    const emitter = provider as BaseProvider & {
-      on?: (event: string, listener: (...args: any[]) => void) => void;
-      removeListener?: (event: string, listener: (...args: any[]) => void) => void;
-    };
-
-    emitter.on?.('accountsChanged', handleAccountsChanged);
-    emitter.on?.('disconnect', handleDisconnect);
-
-    return () => {
-      emitter.removeListener?.('accountsChanged', handleAccountsChanged);
-      emitter.removeListener?.('disconnect', handleDisconnect);
-    };
-  }, [hydrateFundingAddress, provider, subAccount?.address]);
 
   const fetchBalance = useCallback(
     async (override?: `0x${string}` | null) => {
@@ -455,6 +292,63 @@ export function BaseAccountProvider({ children }: { children: React.ReactNode })
     [fundingAddress, provider, publicClient],
   );
 
+  useEffect(() => {
+    if (!provider) {
+      setFundingAddress(null);
+      setSpendTokenBalance(null);
+      return;
+    }
+    if (!universalAddress) {
+      setFundingAddress(null);
+      setSpendTokenBalance(null);
+      return;
+    }
+    setFundingAddress(universalAddress);
+    void fetchBalance(isAddress(universalAddress) ? universalAddress : undefined);
+  }, [fetchBalance, provider, universalAddress]);
+
+  useEffect(() => {
+    if (!provider) {
+      return;
+    }
+
+    const handleAccountsChanged = (accounts: string[]) => {
+      const knownSubAddress = subAccount?.address ?? null;
+      const nextUniversal =
+        accounts.find((account) => !addressesEqual(account, knownSubAddress)) ?? accounts[0] ?? null;
+      setUniversalAddress(nextUniversal);
+      setFundingAddress(nextUniversal ?? knownSubAddress ?? null);
+      void fetchBalance(
+        isAddress(nextUniversal)
+          ? nextUniversal
+          : isAddress(knownSubAddress)
+            ? knownSubAddress
+            : undefined,
+      );
+    };
+
+    const handleDisconnect = () => {
+      setUniversalAddress(null);
+      setSubAccount(null);
+      setFundingAddress(null);
+      setSpendTokenBalance(null);
+      setAutoSpendEnabled(false);
+    };
+
+    const emitter = provider as BaseProvider & {
+      on?: (event: string, listener: (...args: any[]) => void) => void;
+      removeListener?: (event: string, listener: (...args: any[]) => void) => void;
+    };
+
+    emitter.on?.('accountsChanged', handleAccountsChanged);
+    emitter.on?.('disconnect', handleDisconnect);
+
+    return () => {
+      emitter.removeListener?.('accountsChanged', handleAccountsChanged);
+      emitter.removeListener?.('disconnect', handleDisconnect);
+    };
+  }, [fetchBalance, provider, subAccount?.address]);
+
   const refreshBalance = useCallback(async () => {
     const ensuredAddress = isAddress(fundingAddress)
       ? fundingAddress
@@ -485,7 +379,8 @@ export function BaseAccountProvider({ children }: { children: React.ReactNode })
         if (existing) {
           setSubAccount(existing);
           setError(null);
-          await hydrateFundingAddress();
+          const ensuredFunding = await hydrateFundingAddress();
+          void fetchBalance(isAddress(ensuredFunding) ? ensuredFunding : undefined);
           return existing;
         }
       } catch (getError) {
@@ -518,7 +413,8 @@ export function BaseAccountProvider({ children }: { children: React.ReactNode })
         setSubAccount(created);
         setAutoSpendEnabled(false);
         setError(null);
-        await hydrateFundingAddress({ force: true });
+        const ensuredFunding = await hydrateFundingAddress();
+        void fetchBalance(isAddress(ensuredFunding) ? ensuredFunding : undefined);
         return created;
       } catch (createError) {
         console.error('Failed to create sub account', createError);
@@ -527,7 +423,7 @@ export function BaseAccountProvider({ children }: { children: React.ReactNode })
 
       return null;
     },
-    [hydrateFundingAddress, sdk],
+    [fetchBalance, hydrateFundingAddress, sdk],
   );
 
   const connect = useCallback(async () => {
@@ -540,22 +436,29 @@ export function BaseAccountProvider({ children }: { children: React.ReactNode })
       const preferredAccount =
         accounts.find((account) => !addressesEqual(account, knownSubAddress)) ?? accounts[0] ?? null;
       setUniversalAddress(preferredAccount ?? null);
+      setFundingAddress(preferredAccount ?? knownSubAddress ?? null);
       setAutoSpendEnabled(false);
       const resolvedSub = await resolveSubAccount({ createIfMissing: false });
       if (resolvedSub?.address && preferredAccount && addressesEqual(preferredAccount, resolvedSub.address)) {
         const fallbackUniversal = accounts.find((account) => !addressesEqual(account, resolvedSub.address));
         if (fallbackUniversal) {
           setUniversalAddress(fallbackUniversal);
+          setFundingAddress(fallbackUniversal);
         }
       }
-      await hydrateFundingAddress({ force: true });
+      const accountForBalance = isAddress(preferredAccount)
+        ? preferredAccount
+        : isAddress(knownSubAddress)
+          ? knownSubAddress
+          : null;
+      void fetchBalance(accountForBalance ?? undefined);
     } catch (connectError) {
       console.error('Failed to connect Base account', connectError);
       setError(connectError instanceof Error ? connectError.message : 'Unable to connect wallet');
     } finally {
       setIsConnecting(false);
     }
-  }, [hydrateFundingAddress, provider, resolveSubAccount, sdk, subAccount?.address]);
+  }, [fetchBalance, provider, resolveSubAccount, sdk, subAccount?.address]);
 
   const ensureSubAccount = useCallback(async () => {
     if (!sdk) {
