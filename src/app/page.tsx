@@ -1,4 +1,3 @@
-import Link from 'next/link';
 import { listProducts } from '@/lib/product-service';
 import { ProductCard } from '@/components/product/product-card';
 
@@ -19,12 +18,7 @@ export default async function HomePage() {
       </section>
 
       <section className="space-y-6">
-        <div className="flex items-center justify-between">
-          <h2 className="text-xl font-semibold text-white">Featured this week</h2>
-          <Link href="/shop" className="text-sm text-white/70 hover:text-white">
-            Explore catalog →
-          </Link>
-        </div>
+        <h2 className="text-xl font-semibold text-white">Featured this week</h2>
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
           {featured.map((product) => (
             <ProductCard key={product.id} product={product} />

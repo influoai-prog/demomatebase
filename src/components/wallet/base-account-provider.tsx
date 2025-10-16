@@ -25,6 +25,7 @@ type BaseAccountContextValue = {
   provider: BaseProvider | null;
   sdk: BaseAccountSDK | null;
   universalAddress: string | null;
+  fundingAddress: string | null;
   subAccount: SubAccount | null;
   spendTokenBalance: bigint | null;
   spendTokenDecimals: number;
@@ -123,6 +124,16 @@ export function BaseAccountProvider({ children }: { children: React.ReactNode })
   const [error, setError] = useState<string | null>(null);
   const [autoSpendEnabled, setAutoSpendEnabled] = useState(false);
 
+  const fundingAddress = useMemo(() => {
+    if (isAddress(universalAddress)) {
+      return universalAddress;
+    }
+    if (isAddress(subAccount?.address)) {
+      return subAccount?.address ?? null;
+    }
+    return null;
+  }, [subAccount?.address, universalAddress]);
+
   useEffect(() => {
     if (typeof window === 'undefined') {
       return;
@@ -164,11 +175,10 @@ export function BaseAccountProvider({ children }: { children: React.ReactNode })
     if (!provider?.request) {
       return null;
     }
-    const accountAddressCandidate = universalAddress ?? subAccount?.address ?? null;
-    if (!isAddress(accountAddressCandidate)) {
+    if (!isAddress(fundingAddress)) {
       return null;
     }
-    const accountAddress = accountAddressCandidate;
+    const accountAddress = fundingAddress;
 
     try {
       if (isAddress(spendTokenAddress)) {
@@ -208,9 +218,17 @@ export function BaseAccountProvider({ children }: { children: React.ReactNode })
     }
     setSpendTokenBalance(null);
     return null;
-  }, [provider, subAccount?.address, universalAddress]);
+  }, [fundingAddress, provider]);
 
   const refreshBalance = useCallback(() => fetchBalance(), [fetchBalance]);
+
+  useEffect(() => {
+    if (!fundingAddress) {
+      setSpendTokenBalance(null);
+      return;
+    }
+    void fetchBalance();
+  }, [fetchBalance, fundingAddress]);
 
   const resolveSubAccount = useCallback(async () => {
     if (!sdk) {
@@ -355,7 +373,6 @@ export function BaseAccountProvider({ children }: { children: React.ReactNode })
       throw new Error('Base provider unavailable for invoices');
     }
 
-    const fundingAddress = universalAddress ?? ensured.address;
     if (!fundingAddress) {
       throw new Error('No Base account available to fund invoice');
     }
@@ -429,7 +446,7 @@ export function BaseAccountProvider({ children }: { children: React.ReactNode })
       }
       throw invoiceError instanceof Error ? invoiceError : new Error('Invoice payment failed');
     }
-  }, [ensureSubAccount, provider, autoSpendEnabled, requestAutoSpend, fetchBalance, universalAddress]);
+  }, [ensureSubAccount, provider, autoSpendEnabled, requestAutoSpend, fetchBalance, fundingAddress]);
 
   const disconnect = useCallback(async () => {
     if (!provider) return;
@@ -450,6 +467,7 @@ export function BaseAccountProvider({ children }: { children: React.ReactNode })
       provider,
       sdk,
       universalAddress,
+      fundingAddress,
       subAccount,
       spendTokenBalance,
       spendTokenDecimals,
@@ -467,6 +485,7 @@ export function BaseAccountProvider({ children }: { children: React.ReactNode })
       provider,
       sdk,
       universalAddress,
+      fundingAddress,
       subAccount,
       spendTokenBalance,
       isConnecting,

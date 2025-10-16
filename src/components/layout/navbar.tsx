@@ -2,14 +2,11 @@
 
 import Link from 'next/link';
 import { useMemo } from 'react';
-import { Button } from '@/components/ui/button';
 import { ConnectWalletButton } from '../wallet/connect-wallet-button';
 import { CartButton } from '@/components/cart/cart-button';
 import { useBaseAccount } from '../wallet/base-account-provider';
 import { formatTokenBalance } from '@/lib/utils';
-
-const FUND_WALLET_URL =
-  process.env.NEXT_PUBLIC_BASE_FAUCET_URL ?? 'https://docs.base.org/tools/network-faucets';
+import { FundWalletButton } from '../wallet/fund-wallet-button';
 
 export function Navbar() {
   const { spendTokenBalance, spendTokenDecimals } = useBaseAccount();
@@ -32,24 +29,7 @@ export function Navbar() {
               {formattedBalance}
             </span>
           </div>
-          <Button
-            asChild
-            variant="outline"
-            className="hidden rounded-full border-white/30 bg-white/10 px-5 text-xs font-semibold uppercase tracking-[0.35em] text-white/80 transition hover:bg-white/20 sm:inline-flex"
-          >
-            <Link href={FUND_WALLET_URL} target="_blank" rel="noreferrer">
-              Fund Wallet
-            </Link>
-          </Button>
-          <Button
-            asChild
-            variant="outline"
-            className="rounded-full border-white/30 bg-white/10 px-4 text-[11px] font-semibold uppercase tracking-[0.3em] text-white/80 transition hover:bg-white/20 sm:hidden"
-          >
-            <Link href={FUND_WALLET_URL} target="_blank" rel="noreferrer">
-              Fund
-            </Link>
-          </Button>
+          <FundWalletButton />
           <ConnectWalletButton />
           <CartButton />
         </div>

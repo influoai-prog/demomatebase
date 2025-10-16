@@ -12,6 +12,7 @@ export function ConnectWalletButton() {
     disconnect,
     isConnecting,
     universalAddress,
+    fundingAddress,
     subAccount,
     autoSpendEnabled,
     spendTokenBalance,
@@ -84,7 +85,7 @@ export function ConnectWalletButton() {
         disabled={isConnecting}
       >
         {isConnecting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Wallet2 className="h-4 w-4" />}
-        <span>{isConnected ? truncateAddress(universalAddress ?? subAccount?.address ?? '') : 'Base Wallet'}</span>
+        <span>{isConnected ? truncateAddress(fundingAddress ?? universalAddress ?? subAccount?.address ?? '') : 'Base Wallet'}</span>
         {isConnected && autoSpendEnabled && (
           <span className="flex items-center gap-1 rounded-full border border-white/20 bg-white/10 px-3 py-1 text-[11px] font-medium uppercase tracking-[0.3em] text-white/70">
             <Sparkles className="h-3 w-3" />

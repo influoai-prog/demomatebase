@@ -11,7 +11,15 @@ import { toast } from 'sonner';
 const TOKEN_PRICE_USD = 3200; // mocked ETH price
 
 export function CheckoutFlow() {
-  const { provider, connect, ensureSubAccount, requestAutoSpend, subAccount, universalAddress } = useBaseAccount();
+  const {
+    provider,
+    connect,
+    ensureSubAccount,
+    requestAutoSpend,
+    subAccount,
+    universalAddress,
+    fundingAddress,
+  } = useBaseAccount();
   const lines = useCart((state) => state.lines);
   const clearCart = useCart((state) => state.clear);
   const [isPreparing, setIsPreparing] = useState(false);
@@ -101,8 +109,8 @@ export function CheckoutFlow() {
       setIsPaying(true);
       setStatus('paying');
       const baseProvider = getProvider();
-      const [, sub] = (await baseProvider.request({ method: 'eth_requestAccounts', params: [] })) as string[];
-      const from = sub ?? subAccount?.address ?? universalAddress;
+      const accounts = (await baseProvider.request({ method: 'eth_requestAccounts', params: [] })) as string[];
+      const from = fundingAddress ?? accounts[0] ?? subAccount?.address ?? universalAddress;
       if (!from) {
         throw new Error('No Base account available for payment');
       }
