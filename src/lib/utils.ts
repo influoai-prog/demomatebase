@@ -1,4 +1,5 @@
 import { type ClassValue, clsx } from 'clsx';
+import { formatEther } from 'viem';
 import { twMerge } from 'tailwind-merge';
 
 export function cn(...inputs: ClassValue[]): string {
@@ -44,4 +45,15 @@ export function truncateAddress(address?: string | null, lead = 4, tail = 4): st
     return address;
   }
   return `${address.slice(0, lead + 2)}…${address.slice(-tail)}`;
+}
+
+export function formatEthBalance(value: bigint, maximumFractionDigits = 4): string {
+  const numeric = Number.parseFloat(formatEther(value));
+  if (!Number.isFinite(numeric)) {
+    return formatEther(value);
+  }
+  return new Intl.NumberFormat('en-US', {
+    minimumFractionDigits: 0,
+    maximumFractionDigits,
+  }).format(numeric);
 }
