@@ -67,6 +67,107 @@ function isAddress(candidate: string | null | undefined): candidate is `0x${stri
   return typeof candidate === 'string' && ADDRESS_PATTERN.test(candidate);
 }
 
+type WalletConnectAccount = {
+  address?: string;
+  capabilities?: Record<string, unknown>;
+};
+
+type WalletConnectResponse = {
+  accounts?: WalletConnectAccount[];
+};
+
+function firstValidAddress(...candidates: Array<string | null | undefined>): `0x${string}` | null {
+  for (const candidate of candidates) {
+    if (isAddress(candidate)) {
+      return candidate;
+    }
+  }
+  return null;
+}
+
+function pickAddress(value: unknown): `0x${string}` | null {
+  if (typeof value === 'string' && isAddress(value)) {
+    return value;
+  }
+  if (!value) {
+    return null;
+  }
+  if (Array.isArray(value)) {
+    for (const entry of value) {
+      const address = pickAddress(entry);
+      if (address) {
+        return address;
+      }
+    }
+    return null;
+  }
+  if (typeof value === 'object') {
+    const record = value as Record<string, unknown>;
+    const direct = record.address;
+    if (typeof direct === 'string' && isAddress(direct)) {
+      return direct;
+    }
+    for (const key of ['account', 'source', 'owner', 'from']) {
+      const candidate = record[key];
+      if (typeof candidate === 'string' && isAddress(candidate)) {
+        return candidate;
+      }
+    }
+    for (const nested of Object.values(record)) {
+      const address = pickAddress(nested);
+      if (address) {
+        return address;
+      }
+    }
+  }
+  return null;
+}
+
+function extractFundingAddressFromAccount(
+  account: WalletConnectAccount | null | undefined,
+): `0x${string}` | null {
+  if (!account) {
+    return null;
+  }
+
+  const capabilities = account.capabilities;
+  if (capabilities && typeof capabilities === 'object') {
+    const fundingCapability = (capabilities as Record<string, unknown>).funding;
+    const fundingAddress = pickAddress(fundingCapability);
+    if (fundingAddress) {
+      return fundingAddress;
+    }
+
+    const subAccounts = (capabilities as Record<string, unknown>).subAccounts;
+    if (Array.isArray(subAccounts)) {
+      const fundingEntry = subAccounts.find((entry) => {
+        if (!entry || typeof entry !== 'object') {
+          return false;
+        }
+        const { type, role } = entry as { type?: string; role?: string };
+        return (
+          (typeof type === 'string' && type.toLowerCase() === 'funding') ||
+          (typeof role === 'string' && role.toLowerCase() === 'funding')
+        );
+      });
+      if (fundingEntry) {
+        const address = pickAddress(fundingEntry);
+        if (address) {
+          return address;
+        }
+      }
+      for (const entry of subAccounts) {
+        const candidate = pickAddress(entry);
+        if (candidate) {
+          return candidate;
+        }
+      }
+    }
+  }
+
+  return pickAddress(account.address);
+}
+
 function checkSpendPermission(entry: WalletPermission | undefined) {
   if (!entry?.permissions?.spend?.length) {
     return false;
@@ -118,21 +219,48 @@ export function BaseAccountProvider({ children }: { children: React.ReactNode })
   const [sdk, setSdk] = useState<BaseAccountSDK | null>(null);
   const provider = useMemo(() => (sdk ? sdk.getProvider() : null), [sdk]);
   const [universalAddress, setUniversalAddress] = useState<string | null>(null);
+  const [fundingAddress, setFundingAddress] = useState<string | null>(null);
   const [subAccount, setSubAccount] = useState<SubAccount | null>(null);
   const [spendTokenBalance, setSpendTokenBalance] = useState<bigint | null>(null);
   const [isConnecting, setIsConnecting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [autoSpendEnabled, setAutoSpendEnabled] = useState(false);
 
-  const fundingAddress = useMemo(() => {
-    if (isAddress(universalAddress)) {
-      return universalAddress;
+  const getFallbackFundingAddress = useCallback(
+    () => firstValidAddress(universalAddress, subAccount?.address),
+    [subAccount?.address, universalAddress],
+  );
+
+  const fallbackFundingAddress = useCallback(() => {
+    const fallback = getFallbackFundingAddress();
+    setFundingAddress(fallback);
+    return fallback;
+  }, [getFallbackFundingAddress]);
+
+  const hydrateFundingAddress = useCallback(async () => {
+    if (!provider?.request) {
+      return fallbackFundingAddress();
     }
-    if (isAddress(subAccount?.address)) {
-      return subAccount?.address ?? null;
+    try {
+      const response = (await provider.request({
+        method: 'wallet_connect',
+        params: [
+          {
+            version: '1',
+            capabilities: {},
+          },
+        ],
+      })) as WalletConnectResponse;
+      const account = Array.isArray(response?.accounts) ? response.accounts[0] : null;
+      const candidate =
+        extractFundingAddressFromAccount(account ?? undefined) ?? getFallbackFundingAddress();
+      setFundingAddress(candidate);
+      return candidate;
+    } catch (addressError) {
+      console.warn('Failed to resolve Base funding address', addressError);
+      return fallbackFundingAddress();
     }
-    return null;
-  }, [subAccount?.address, universalAddress]);
+  }, [fallbackFundingAddress, getFallbackFundingAddress, provider]);
 
   useEffect(() => {
     if (typeof window === 'undefined') {
@@ -143,16 +271,26 @@ export function BaseAccountProvider({ children }: { children: React.ReactNode })
 
   useEffect(() => {
     if (!provider) {
+      setFundingAddress(null);
+      return;
+    }
+    void hydrateFundingAddress();
+  }, [hydrateFundingAddress, provider]);
+
+  useEffect(() => {
+    if (!provider) {
       return;
     }
 
     const handleAccountsChanged = (accounts: string[]) => {
       setUniversalAddress(accounts[0] ?? null);
+      void hydrateFundingAddress();
     };
 
     const handleDisconnect = () => {
       setUniversalAddress(null);
       setSubAccount(null);
+      setFundingAddress(null);
       setSpendTokenBalance(null);
       setAutoSpendEnabled(false);
     };
@@ -169,65 +307,77 @@ export function BaseAccountProvider({ children }: { children: React.ReactNode })
       emitter.removeListener?.('accountsChanged', handleAccountsChanged);
       emitter.removeListener?.('disconnect', handleDisconnect);
     };
-  }, [provider]);
+  }, [hydrateFundingAddress, provider]);
 
-  const fetchBalance = useCallback(async () => {
-    if (!provider?.request) {
-      return null;
-    }
-    if (!isAddress(fundingAddress)) {
-      return null;
-    }
-    const accountAddress = fundingAddress;
-
-    try {
-      if (isAddress(spendTokenAddress)) {
-        const data = encodeFunctionData({
-          abi: ERC20_BALANCE_OF_ABI,
-          functionName: 'balanceOf',
-          args: [accountAddress],
-        });
-        const balanceHex = (await provider.request({
-          method: 'eth_call',
-          params: [
-            {
-              to: spendTokenAddress,
-              data,
-            },
-            'latest',
-          ],
-        })) as string;
-        if (typeof balanceHex === 'string' && balanceHex.length > 0) {
-          const normalized = BigInt(balanceHex);
-          setSpendTokenBalance(normalized);
-          return normalized;
-        }
-      } else {
-        const balanceHex = (await provider.request({
-          method: 'eth_getBalance',
-          params: [accountAddress, 'latest'],
-        })) as string;
-        if (typeof balanceHex === 'string') {
-          const normalized = BigInt(balanceHex);
-          setSpendTokenBalance(normalized);
-          return normalized;
-        }
+  const fetchBalance = useCallback(
+    async (override?: `0x${string}` | null) => {
+      if (!provider?.request) {
+        return null;
       }
-    } catch (balanceError) {
-      console.warn('Failed to refresh Base balance', balanceError);
-    }
-    setSpendTokenBalance(null);
-    return null;
-  }, [fundingAddress, provider]);
+      const accountAddress = override ?? (isAddress(fundingAddress) ? fundingAddress : null);
+      if (!isAddress(accountAddress)) {
+        return null;
+      }
 
-  const refreshBalance = useCallback(() => fetchBalance(), [fetchBalance]);
+      try {
+        if (isAddress(spendTokenAddress)) {
+          const data = encodeFunctionData({
+            abi: ERC20_BALANCE_OF_ABI,
+            functionName: 'balanceOf',
+            args: [accountAddress],
+          });
+          const balanceHex = (await provider.request({
+            method: 'eth_call',
+            params: [
+              {
+                to: spendTokenAddress,
+                data,
+              },
+              'latest',
+            ],
+          })) as string;
+          if (typeof balanceHex === 'string' && balanceHex.length > 0) {
+            const normalized = BigInt(balanceHex);
+            setSpendTokenBalance(normalized);
+            return normalized;
+          }
+        } else {
+          const balanceHex = (await provider.request({
+            method: 'eth_getBalance',
+            params: [accountAddress, 'latest'],
+          })) as string;
+          if (typeof balanceHex === 'string') {
+            const normalized = BigInt(balanceHex);
+            setSpendTokenBalance(normalized);
+            return normalized;
+          }
+        }
+      } catch (balanceError) {
+        console.warn('Failed to refresh Base balance', balanceError);
+      }
+      setSpendTokenBalance(null);
+      return null;
+    },
+    [fundingAddress, provider],
+  );
+
+  const refreshBalance = useCallback(async () => {
+    const ensuredAddress = isAddress(fundingAddress)
+      ? fundingAddress
+      : await hydrateFundingAddress();
+    if (!isAddress(ensuredAddress)) {
+      setSpendTokenBalance(null);
+      return null;
+    }
+    return fetchBalance(ensuredAddress);
+  }, [fetchBalance, fundingAddress, hydrateFundingAddress]);
 
   useEffect(() => {
     if (!fundingAddress) {
       setSpendTokenBalance(null);
       return;
     }
-    void fetchBalance();
+    void fetchBalance(isAddress(fundingAddress) ? fundingAddress : undefined);
   }, [fetchBalance, fundingAddress]);
 
   const resolveSubAccount = useCallback(async () => {
@@ -239,7 +389,7 @@ export function BaseAccountProvider({ children }: { children: React.ReactNode })
       if (existing) {
         setSubAccount(existing);
         setError(null);
-        void fetchBalance();
+        await hydrateFundingAddress();
         return existing;
       }
     } catch (getError) {
@@ -266,14 +416,14 @@ export function BaseAccountProvider({ children }: { children: React.ReactNode })
       setSubAccount(created);
       setAutoSpendEnabled(false);
       setError(null);
-      void fetchBalance();
+      await hydrateFundingAddress();
       return created;
     } catch (createError) {
       console.error('Failed to create sub account', createError);
       setError(createError instanceof Error ? createError.message : 'Unable to create sub account');
       return null;
     }
-  }, [fetchBalance, sdk]);
+  }, [hydrateFundingAddress, sdk]);
 
   const connect = useCallback(async () => {
     if (!provider || !sdk) return;
@@ -282,6 +432,7 @@ export function BaseAccountProvider({ children }: { children: React.ReactNode })
     try {
       const accounts = (await provider.request({ method: 'eth_requestAccounts', params: [] })) as string[];
       setUniversalAddress(accounts[0] ?? null);
+      await hydrateFundingAddress();
       await resolveSubAccount();
     } catch (connectError) {
       console.error('Failed to connect Base account', connectError);
@@ -289,7 +440,7 @@ export function BaseAccountProvider({ children }: { children: React.ReactNode })
     } finally {
       setIsConnecting(false);
     }
-  }, [provider, resolveSubAccount, sdk]);
+  }, [hydrateFundingAddress, provider, resolveSubAccount, sdk]);
 
   const ensureSubAccount = useCallback(async () => {
     if (!sdk) {
@@ -457,6 +608,7 @@ export function BaseAccountProvider({ children }: { children: React.ReactNode })
     } finally {
       setUniversalAddress(null);
       setSubAccount(null);
+      setFundingAddress(null);
       setSpendTokenBalance(null);
       setAutoSpendEnabled(false);
     }
