@@ -1,35 +1,55 @@
+import Link from 'next/link';
 import { listProducts } from '@/lib/product-service';
 import { ProductCard } from '@/components/product/product-card';
-import { GithubRepoCard } from '@/components/github/github-repo-card';
+import { Button } from '@/components/ui/button';
 
 export default async function HomePage() {
-  const products = (await listProducts({ sort: 'popularity' })).slice(0, 12);
+  const featured = (await listProducts({ sort: 'popularity' })).slice(0, 6);
 
   return (
-    <div className="mx-auto flex max-w-5xl flex-col gap-10">
-      <section className="overflow-hidden rounded-[32px] border border-white/10 bg-[radial-gradient(circle_at_top,rgba(56,189,248,0.2),rgba(15,23,42,0.92))] p-8 shadow-[0_40px_120px_-60px_rgba(56,189,248,0.85)] backdrop-blur-3xl">
-        <div className="space-y-6">
-          <div className="space-y-2">
-            <p className="text-[11px] uppercase tracking-[0.45em] text-white/60">Powered by Base</p>
-            <h1 className="text-4xl font-semibold tracking-tight text-white md:text-[42px]">Mate Shop</h1>
-            <p className="max-w-2xl text-sm leading-relaxed text-white/70">
-              A curated, single page of twelve micro curios. Each glassy glyph costs five dollars or less and settles through a
-              Base Sub Account when you connect and check out.
-            </p>
+    <div className="space-y-16">
+      <section className="glass-card relative overflow-hidden px-8 py-16 md:px-16">
+        <div className="absolute inset-0 bg-gradient-to-br from-white/10 via-transparent to-white/5" aria-hidden />
+        <div className="relative z-10 flex flex-col gap-8">
+          <p className="text-xs uppercase tracking-[0.4em] text-white/70">On-Chain Curated</p>
+          <h1 className="max-w-2xl text-4xl font-semibold tracking-tight text-white md:text-5xl">
+            Glass Gift Shop
+          </h1>
+          <p className="max-w-2xl text-lg text-white/70">
+            Ultra-minimal gifts with luminous line art, curated for clothing, food, and intimate moments.
+            Checkout flows through Base with automated sub accounts and spend permissions.
+          </p>
+          <div className="flex flex-wrap gap-3">
+            {['Clothing', 'Food', 'Gifts', 'Erotic'].map((category) => (
+              <Link
+                key={category}
+                href={category === 'Erotic' ? '/legal/erotic-gate' : `/shop?category=${category}`}
+                className="glass-button"
+              >
+                {category}
+              </Link>
+            ))}
           </div>
-          <div className="max-w-md">
-            <GithubRepoCard title="Base Account SDK Quickstart" githubUrl="https://github.com/base/account-sdk" />
+          <div className="flex gap-3">
+            <Button asChild className="rounded-full px-8">
+              <Link href="/shop">Browse All</Link>
+            </Button>
+            <Button asChild variant="outline" className="rounded-full px-8">
+              <Link href="/checkout">Checkout Demo</Link>
+            </Button>
           </div>
         </div>
       </section>
 
-      <section className="space-y-4">
+      <section className="space-y-6">
         <div className="flex items-center justify-between">
-          <h2 className="text-lg font-semibold text-white">Catalog</h2>
-          <p className="text-xs text-white/60">Add a few gifts, settle the $0.10 Base invoice, then finish checkout.</p>
+          <h2 className="text-xl font-semibold text-white">Featured this week</h2>
+          <Link href="/shop" className="text-sm text-white/70 hover:text-white">
+            Explore catalog →
+          </Link>
         </div>
-        <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
-          {products.map((product) => (
+        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+          {featured.map((product) => (
             <ProductCard key={product.id} product={product} />
           ))}
         </div>

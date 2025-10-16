@@ -2,37 +2,60 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { ShoppingBag, Trash2 } from 'lucide-react';
-import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
-import { useCart } from './cart-provider';
+import { Button } from '@/components/ui/button';
 import { calculateCartTotals, formatCurrency, truncateAddress } from '@/lib/utils';
+import { useCart } from '@/lib/cart-store';
+import { products } from '@/data/products';
 import { useBaseAccount } from '@/components/wallet/base-account-provider';
+import { useCartDrawer } from '@/lib/cart-drawer';
 import { toast } from 'sonner';
 
+type CartItem = (typeof products)[number] & { quantity: number };
+
+const PRODUCT_MAP = new Map(products.map((product) => [product.id, product]));
+
 export function CartButton() {
-  const { items, itemCount, totalCents, removeItem, clear, isOpen, setOpen, openCart } = useCart();
+  const lines = useCart((state) => state.lines);
+  const removeItem = useCart((state) => state.removeItem);
+  const clearCart = useCart((state) => state.clear);
+  const itemCount = useMemo(() => lines.reduce((total, line) => total + line.quantity, 0), [lines]);
+
+  const { open, setOpen, openCart } = useCartDrawer();
+
+  const items = useMemo(() => {
+    return lines
+      .map((line) => {
+        const product = PRODUCT_MAP.get(line.productId);
+        if (!product) return null;
+        return { ...product, quantity: line.quantity } satisfies CartItem;
+      })
+      .filter(Boolean) as CartItem[];
+  }, [lines]);
+
+  const totals = useMemo(() => calculateCartTotals(items.map((item) => ({ priceCents: item.priceCents, quantity: item.quantity }))), [items]);
+  const totalCents = totals.totalCents;
+
   const {
-    subAccount,
-    universalAddress,
     connect,
     ensureSubAccount,
     payInvoice,
+    universalAddress,
+    subAccount,
     autoSpendEnabled,
     isConnecting,
     error,
   } = useBaseAccount();
+
   const [isCheckingOut, setIsCheckingOut] = useState(false);
   const [isPayingInvoice, setIsPayingInvoice] = useState(false);
   const [invoicePaid, setInvoicePaid] = useState(false);
 
-  const totals = useMemo(() => calculateCartTotals(items), [items]);
-  const invoiceCents = 10;
-
   useEffect(() => {
-    if (!isOpen) {
+    if (!open) {
       setInvoicePaid(false);
     }
-  }, [isOpen]);
+  }, [open]);
 
   useEffect(() => {
     if (!items.length) {
@@ -87,7 +110,7 @@ export function CartButton() {
         throw new Error('Unable to provision Base sub account');
       }
       toast.success(`Order confirmed through ${truncateAddress(ensured.address)}`);
-      clear();
+      clearCart();
       setOpen(false);
       setInvoicePaid(false);
     } catch (checkoutError) {
@@ -98,15 +121,17 @@ export function CartButton() {
     }
   };
 
+  const invoiceCents = 10;
+
   return (
-    <Sheet open={isOpen} onOpenChange={setOpen}>
+    <Sheet open={open} onOpenChange={setOpen}>
       <SheetTrigger asChild>
         <Button
           variant="ghost"
           size="lg"
           className="group gap-2 rounded-full border border-white/20 bg-white/5 px-4 py-2 text-sm text-white/80 hover:border-white/40 hover:bg-white/10 hover:text-white"
           onClick={() => {
-            if (!isOpen) {
+            if (!open) {
               openCart();
             }
           }}
@@ -197,9 +222,7 @@ export function CartButton() {
                 Auto spend ready on <span className="font-semibold">{truncateAddress(subAccount.address)}</span>.
               </div>
             )}
-            {error && (
-              <div className="rounded-xl border border-red-400/30 bg-red-500/10 p-3 text-xs text-red-100">{error}</div>
-            )}
+            {error && <div className="rounded-xl border border-red-400/30 bg-red-500/10 p-3 text-xs text-red-100">{error}</div>}
             <Button
               size="lg"
               className="w-full rounded-full border border-sky-400/40 bg-sky-500/20 text-[0.84rem] font-semibold uppercase tracking-[0.26em] text-white hover:bg-sky-500/30"
@@ -212,7 +235,7 @@ export function CartButton() {
               variant="ghost"
               className="w-full text-xs uppercase tracking-[0.3em] text-white/50 hover:text-white"
               onClick={() => {
-                clear();
+                clearCart();
                 setInvoicePaid(false);
               }}
               disabled={!items.length}

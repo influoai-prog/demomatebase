@@ -2,39 +2,53 @@
 
 import { toast } from 'sonner';
 import type { LucideIcon } from 'lucide-react';
-import { Bath, Candy, Coins, CupSoda, Flower2, KeyRound, Mail, Moon, NotebookPen, Sparkles, Sprout, Star } from 'lucide-react';
+import { Bath, Candy, CupSoda, Flower2, KeyRound, Mail, Moon, NotebookPen, Sparkles, Sprout, Star } from 'lucide-react';
 import { Product } from '@/data/products';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { formatCurrency } from '@/lib/utils';
-import { useCart } from '@/components/cart/cart-provider';
+import { useCart } from '@/lib/cart-store';
+import { useCartDrawer } from '@/lib/cart-drawer';
 
 const iconMap: Record<string, LucideIcon> = {
-  'gift-arcade-token': Coins,
-  'gift-glass-pin': Sparkles,
-  'food-honey-drops': Candy,
-  'food-moon-tea': Moon,
-  'gift-lumen-postcard': Mail,
-  'gift-prism-notebook': NotebookPen,
-  'gift-vapor-keychain': KeyRound,
-  'food-cocoa-bite': CupSoda,
-  'gift-bath-soak': Bath,
-  'gift-scent-sachet': Flower2,
-  'gift-mini-planter': Sprout,
-  'gift-sticker-pack': Star
+  'clo-1': Sparkles,
+  'clo-2': Moon,
+  'clo-3': Star,
+  'clo-4': Sparkles,
+  'clo-5': CupSoda,
+  'clo-6': Candy,
+  'food-1': Candy,
+  'food-2': Candy,
+  'food-3': CupSoda,
+  'food-4': Sprout,
+  'food-5': CupSoda,
+  'food-6': Candy,
+  'gift-1': Sparkles,
+  'gift-2': Sprout,
+  'gift-3': Flower2,
+  'gift-4': NotebookPen,
+  'gift-5': Mail,
+  'gift-6': Star,
+  'ero-1': Bath,
+  'ero-2': Sparkles,
+  'ero-3': KeyRound,
+  'ero-4': Moon,
+  'ero-5': Sparkles,
+  'ero-6': Sprout,
 };
 
 export function ProductCard({ product }: { product: Product }) {
-  const { addItem, openCart } = useCart();
+  const addItem = useCart((state) => state.addItem);
+  const openCart = useCartDrawer((state) => state.openCart);
   const Icon = iconMap[product.id] ?? Sparkles;
 
   const handleAdd = () => {
-    addItem(product);
+    addItem(product, 1);
     toast.success(`${product.title} added to your cart.`);
   };
 
   const handleCheckout = () => {
-    addItem(product);
+    addItem(product, 1);
     openCart();
     toast.success(`${product.title} queued for checkout.`);
   };
@@ -42,7 +56,7 @@ export function ProductCard({ product }: { product: Product }) {
   return (
     <article className="flex flex-col gap-5 rounded-[28px] border border-white/20 bg-white/10 p-5 text-white/80 shadow-[0_24px_50px_-36px_rgba(148,163,184,0.75)] backdrop-blur-2xl transition duration-200 hover:-translate-y-1 hover:border-white/40 hover:bg-white/20">
       <div className="relative overflow-hidden rounded-[24px] border border-white/25 bg-gradient-to-br from-white/20 via-white/15 to-white/10 p-8 shadow-[0_18px_46px_-32px_rgba(56,189,248,0.75)]">
-        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.4),rgba(255,255,255,0))]" />
+        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.4),rgba(255,195,255,0))]" />
         <Icon className="relative mx-auto h-14 w-14 text-white drop-shadow-[0_6px_32px_rgba(255,255,255,0.55)]" strokeWidth={1.4} />
       </div>
       <div className="flex flex-col gap-3">

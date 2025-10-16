@@ -29,10 +29,9 @@ export function bufferAmount(cents: number, bufferPercentage = 0.05) {
   return Math.round(cents * (1 + bufferPercentage));
 }
 
-export function truncateAddress(address?: string | null, lead = 4, tail = 4): string {
-  if (!address) return '';
-  if (address.length <= lead + tail + 2) {
+export function truncateAddress(address: string, size = 4) {
+  if (!address || address.length <= size * 2 + 2) {
     return address;
   }
-  return `${address.slice(0, lead + 2)}…${address.slice(-tail)}`;
+  return `${address.slice(0, size + 2)}…${address.slice(-size)}`;
 }
