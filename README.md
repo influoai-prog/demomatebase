@@ -9,7 +9,7 @@ A single-page micro shop built with the Next.js App Router and Tailwind CSS. Mat
 - 🧊 Real Base Account SDK integration that provisions Sub Accounts on connect, enables auto spend permissions, and supports skipping repetitive approvals
 - 💳 Embedded Base Perfect Checkout flow that routes cart totals through Base Pay using Sub Accounts
 - 📦 Configurable metadata, paymaster routing, and Base network selection via environment variables
-- 💼 Wallet tray surfaces the connected account, signing/funder wallet, and auto-spend sub account with live balances, one-click top-ups, built-in faucet requests, and manual funding shortcuts
+- 💼 Wallet tray surfaces the connected account, signing/funder wallet, and auto-spend sub account with live balances and one-click top-ups
 
 ## Getting Started
 
@@ -62,10 +62,6 @@ CDP_WALLET_SECRET=your-cdp-wallet-secret
 ### Perfect Checkout
 
 Mate Shop wires the cart experience into Base Perfect Checkout. After provisioning a Sub Account and settling the $0.10 invoice, the “Complete Checkout” button triggers the `pay` helper from the Base Account SDK. This launches the Base Perfect Checkout overlay, requests an Auto Spend permission if needed, and settles the cart total with USDC to the configured merchant address. Transaction hashes are surfaced back in the UI so shoppers can verify the payment.
-
-### Testnet faucet support
-
-When `NEXT_PUBLIC_NETWORK` is set to `base-sepolia`, the wallet tray links directly to the official Base faucet. Projects may also call the in-app `POST /api/faucet` proxy, which wraps the [Coinbase Developer Platform faucet API](https://portal.cdp.coinbase.com/). Provide your CDP API key and wallet secret via `CDP_API_KEY_ID`, `CDP_API_KEY_SECRET`, and `CDP_WALLET_SECRET` to enable the proxy endpoint.
 
 ### Running Locally
 

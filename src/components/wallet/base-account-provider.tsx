@@ -42,6 +42,9 @@ type BaseAccountContextValue = {
   universalBalance: bigint | null;
   ownerBalance: bigint | null;
   subAccountBalance: bigint | null;
+  universalNativeBalance: bigint | null;
+  ownerNativeBalance: bigint | null;
+  subAccountNativeBalance: bigint | null;
   refreshBalances: (overrides?: {
     owner?: `0x${string}` | null;
     subAccount?: `0x${string}` | null;
@@ -54,6 +57,8 @@ type BaseAccountContextValue = {
   defaultSubAccountFundingAmount: bigint;
   balanceSymbol: string;
   balanceDecimals: number;
+  nativeBalanceSymbol: string;
+  nativeBalanceDecimals: number;
 };
 
 const BaseAccountContext = createContext<BaseAccountContextValue | null>(null);
@@ -206,6 +211,9 @@ export function BaseAccountProvider({ children }: { children: React.ReactNode })
   const [ownerBalance, setOwnerBalance] = useState<bigint | null>(null);
   const [subAccountBalance, setSubAccountBalance] = useState<bigint | null>(null);
   const [universalBalance, setUniversalBalance] = useState<bigint | null>(null);
+  const [ownerNativeBalance, setOwnerNativeBalance] = useState<bigint | null>(null);
+  const [subAccountNativeBalance, setSubAccountNativeBalance] = useState<bigint | null>(null);
+  const [universalNativeBalance, setUniversalNativeBalance] = useState<bigint | null>(null);
   const [isFetchingBalances, setIsFetchingBalances] = useState(false);
   const [balanceError, setBalanceError] = useState<string | null>(null);
 
@@ -328,31 +336,47 @@ export function BaseAccountProvider({ children }: { children: React.ReactNode })
       };
 
       try {
-        const addresses = new Map<`0x${string}`, bigint | null>();
+        const addresses = new Map<
+          `0x${string}`,
+          {
+            token: bigint | null;
+            native: bigint | null;
+          }
+        >();
         const uniqueAddresses = [owner, subAccountAddress, universal]
           .filter((candidate): candidate is `0x${string}` => Boolean(candidate))
           .filter((value, index, array) => array.indexOf(value) === index);
 
         await Promise.all(
           uniqueAddresses.map(async (address) => {
-            let balance: bigint | null = null;
+            let tokenBalance: bigint | null = null;
+            let nativeBalance: bigint | null = null;
             try {
-              const tokenBalance = await fetchTokenBalance(address);
-              balance = tokenBalance ?? (await fetchNativeBalance(address));
+              tokenBalance = await fetchTokenBalance(address);
+              nativeBalance = await fetchNativeBalance(address);
             } catch (balanceFetchError) {
               console.warn('Failed to fetch Base balance', balanceFetchError);
               hadFailures = true;
             }
-            if (balance === null) {
+            if (tokenBalance === null && nativeBalance === null) {
               hadFailures = true;
             }
-            addresses.set(address, balance);
+            addresses.set(address, { token: tokenBalance, native: nativeBalance });
           }),
         );
 
-        setOwnerBalance(owner ? addresses.get(owner) ?? null : null);
-        setSubAccountBalance(subAccountAddress ? addresses.get(subAccountAddress) ?? null : null);
-        setUniversalBalance(universal ? addresses.get(universal) ?? null : null);
+        const resolveEntry = (address: `0x${string}` | null) => (address ? addresses.get(address) ?? null : null);
+
+        const ownerEntry = resolveEntry(owner);
+        const subAccountEntry = resolveEntry(subAccountAddress);
+        const universalEntry = resolveEntry(universal);
+
+        setOwnerBalance(ownerEntry?.token ?? null);
+        setOwnerNativeBalance(ownerEntry?.native ?? null);
+        setSubAccountBalance(subAccountEntry?.token ?? null);
+        setSubAccountNativeBalance(subAccountEntry?.native ?? null);
+        setUniversalBalance(universalEntry?.token ?? null);
+        setUniversalNativeBalance(universalEntry?.native ?? null);
         setBalanceError(hadFailures ? 'Unable to load balances from Base RPC.' : null);
       } catch (balanceFetchError) {
         console.warn('Failed to fetch Base balances', balanceFetchError);
@@ -362,6 +386,9 @@ export function BaseAccountProvider({ children }: { children: React.ReactNode })
         setOwnerBalance(null);
         setSubAccountBalance(null);
         setUniversalBalance(null);
+        setOwnerNativeBalance(null);
+        setSubAccountNativeBalance(null);
+        setUniversalNativeBalance(null);
       } finally {
         setIsFetchingBalances(false);
       }
@@ -394,6 +421,9 @@ export function BaseAccountProvider({ children }: { children: React.ReactNode })
       setOwnerBalance(null);
       setSubAccountBalance(null);
       setUniversalBalance(null);
+      setOwnerNativeBalance(null);
+      setSubAccountNativeBalance(null);
+      setUniversalNativeBalance(null);
       setBalanceError(null);
       setConnectedAccounts([]);
     };
@@ -726,6 +756,9 @@ export function BaseAccountProvider({ children }: { children: React.ReactNode })
       setOwnerBalance(null);
       setSubAccountBalance(null);
       setUniversalBalance(null);
+      setOwnerNativeBalance(null);
+      setSubAccountNativeBalance(null);
+      setUniversalNativeBalance(null);
       setBalanceError(null);
       setConnectedAccounts([]);
     }
@@ -772,6 +805,9 @@ export function BaseAccountProvider({ children }: { children: React.ReactNode })
       universalBalance,
       ownerBalance,
       subAccountBalance,
+      universalNativeBalance,
+      ownerNativeBalance,
+      subAccountNativeBalance,
       refreshBalances,
       isFetchingBalances,
       balanceError,
@@ -780,6 +816,8 @@ export function BaseAccountProvider({ children }: { children: React.ReactNode })
       defaultSubAccountFundingAmount,
       balanceSymbol,
       balanceDecimals: spendToken ? spendTokenDecimals : 18,
+      nativeBalanceSymbol: 'ETH',
+      nativeBalanceDecimals: 18,
     }),
     [
       provider,
@@ -798,6 +836,9 @@ export function BaseAccountProvider({ children }: { children: React.ReactNode })
       universalBalance,
       ownerBalance,
       subAccountBalance,
+      universalNativeBalance,
+      ownerNativeBalance,
+      subAccountNativeBalance,
       refreshBalances,
       isFetchingBalances,
       balanceError,

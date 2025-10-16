@@ -19,6 +19,8 @@ export function ConnectWalletButton() {
     autoSpendEnabled,
     ownerBalance,
     subAccountBalance,
+    ownerNativeBalance,
+    subAccountNativeBalance,
     refreshBalances,
     isFetchingBalances,
     balanceError,
@@ -26,6 +28,8 @@ export function ConnectWalletButton() {
     defaultSubAccountFundingAmount,
     balanceSymbol,
     balanceDecimals,
+    nativeBalanceSymbol,
+    nativeBalanceDecimals,
   } = useBaseAccount();
   const isConnected = Boolean(ownerAddress ?? universalAddress ?? subAccount?.address);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -38,6 +42,8 @@ export function ConnectWalletButton() {
   const subAccountAddress = subAccount?.address ?? null;
   const normalizedBalanceSymbol = balanceSymbol.toUpperCase();
   const displayPrecision = normalizedBalanceSymbol === 'USDC' ? 2 : 4;
+  const normalizedNativeSymbol = nativeBalanceSymbol.toUpperCase();
+  const nativeDisplayPrecision = normalizedNativeSymbol === 'ETH' ? 4 : 2;
   const defaultFundingLabel = formatTokenBalance(defaultSubAccountFundingAmount, balanceDecimals, displayPrecision);
   const ownerDisplayAddress = ownerAddress ?? connectedAddress;
   const isCopied = (address: string | null) =>
@@ -179,6 +185,18 @@ export function ConnectWalletButton() {
                       : '—'}
                 </span>
               </div>
+              {(nativeBalanceSymbol.toUpperCase() !== normalizedBalanceSymbol || ownerBalance === null) && (
+                <div className="mt-2 flex items-center justify-between text-xs text-white/60">
+                  <span>Native balance</span>
+                  <span className="font-mono text-sm text-white">
+                    {isFetchingBalances
+                      ? 'Updating…'
+                      : ownerNativeBalance !== null
+                        ? `${formatTokenBalance(ownerNativeBalance, nativeBalanceDecimals, nativeDisplayPrecision)} ${normalizedNativeSymbol}`
+                        : '—'}
+                  </span>
+                </div>
+              )}
               {subAccountAddress && (
                 <div className="mt-3 grid gap-2 text-xs text-white/60">
                   <div className="flex items-center justify-between">
@@ -195,6 +213,22 @@ export function ConnectWalletButton() {
                           : '—'}
                     </span>
                   </div>
+                  {(nativeBalanceSymbol.toUpperCase() !== normalizedBalanceSymbol || subAccountBalance === null) && (
+                    <div className="flex items-center justify-between">
+                      <span>Native balance</span>
+                      <span className="font-mono text-sm text-white">
+                        {isFetchingBalances
+                          ? 'Updating…'
+                          : subAccountNativeBalance !== null
+                            ? `${formatTokenBalance(
+                                subAccountNativeBalance,
+                                nativeBalanceDecimals,
+                                nativeDisplayPrecision,
+                              )} ${normalizedNativeSymbol}`
+                            : '—'}
+                      </span>
+                    </div>
+                  )}
                   <div className="flex items-center justify-between">
                     <span>Funded by</span>
                     <span className="font-mono text-sm text-white">
