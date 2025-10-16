@@ -5,7 +5,6 @@ import { Copy, Loader2, LogOut, RefreshCw, Sparkles, Wallet2 } from 'lucide-reac
 import { Button } from '@/components/ui/button';
 import { useBaseAccount } from './base-account-provider';
 import { formatTokenBalance, truncateAddress } from '@/lib/utils';
-import { toast } from 'sonner';
 
 export function ConnectWalletButton() {
   const {
@@ -14,18 +13,13 @@ export function ConnectWalletButton() {
     isConnecting,
     universalAddress,
     ownerAddress,
-    funderAddress,
     subAccount,
     autoSpendEnabled,
     ownerBalance,
-    subAccountBalance,
     ownerNativeBalance,
-    subAccountNativeBalance,
     refreshBalances,
     isFetchingBalances,
     balanceError,
-    fundSubAccount,
-    defaultSubAccountFundingAmount,
     balanceSymbol,
     balanceDecimals,
     nativeBalanceSymbol,
@@ -34,7 +28,6 @@ export function ConnectWalletButton() {
   const isConnected = Boolean(ownerAddress ?? universalAddress ?? subAccount?.address);
   const [menuOpen, setMenuOpen] = useState(false);
   const [copiedAddress, setCopiedAddress] = useState<string | null>(null);
-  const [isFundingSubAccount, setIsFundingSubAccount] = useState(false);
   const buttonRef = useRef<HTMLButtonElement | null>(null);
 
   const connectedAddress = ownerAddress ?? universalAddress ?? subAccount?.address ?? null;
@@ -44,7 +37,6 @@ export function ConnectWalletButton() {
   const displayPrecision = normalizedBalanceSymbol === 'USDC' ? 2 : 4;
   const normalizedNativeSymbol = nativeBalanceSymbol.toUpperCase();
   const nativeDisplayPrecision = normalizedNativeSymbol === 'ETH' ? 4 : 2;
-  const defaultFundingLabel = formatTokenBalance(defaultSubAccountFundingAmount, balanceDecimals, displayPrecision);
   const ownerDisplayAddress = ownerAddress ?? connectedAddress;
   const isCopied = (address: string | null) =>
     Boolean(address && copiedAddress && copiedAddress.toLowerCase() === address.toLowerCase());
@@ -102,26 +94,6 @@ export function ConnectWalletButton() {
 
   const handleRefreshBalances = () => {
     void refreshBalances();
-  };
-
-  const handleFundSubAccount = async () => {
-    if (!subAccount?.address) {
-      toast.error('Connect a Base wallet before funding the sub account.');
-      return;
-    }
-
-    setIsFundingSubAccount(true);
-    try {
-      await fundSubAccount();
-      toast.success(
-        `Sent ${defaultFundingLabel} ${normalizedBalanceSymbol} to ${truncateAddress(subAccount.address, 6, 6)}`,
-      );
-    } catch (fundError) {
-      const fallback = fundError instanceof Error ? fundError.message : 'Funding failed';
-      toast.error(fallback);
-    } finally {
-      setIsFundingSubAccount(false);
-    }
   };
 
   return (
@@ -203,59 +175,9 @@ export function ConnectWalletButton() {
                     <span>Checkout wallet</span>
                     <span className="font-mono text-sm text-white">{truncateAddress(subAccountAddress, 6, 6)}</span>
                   </div>
-                  <div className="flex items-center justify-between">
-                    <span>Checkout balance</span>
-                    <span className="font-mono text-sm text-white">
-                      {isFetchingBalances
-                        ? 'Updating…'
-                        : subAccountBalance !== null
-                          ? `${formatTokenBalance(subAccountBalance, balanceDecimals, displayPrecision)} ${normalizedBalanceSymbol}`
-                          : '—'}
-                    </span>
-                  </div>
-                  {(nativeBalanceSymbol.toUpperCase() !== normalizedBalanceSymbol || subAccountBalance === null) && (
-                    <div className="flex items-center justify-between">
-                      <span>Native balance</span>
-                      <span className="font-mono text-sm text-white">
-                        {isFetchingBalances
-                          ? 'Updating…'
-                          : subAccountNativeBalance !== null
-                            ? `${formatTokenBalance(
-                                subAccountNativeBalance,
-                                nativeBalanceDecimals,
-                                nativeDisplayPrecision,
-                              )} ${normalizedNativeSymbol}`
-                            : '—'}
-                      </span>
-                    </div>
-                  )}
-                  <div className="flex items-center justify-between">
-                    <span>Funded by</span>
-                    <span className="font-mono text-sm text-white">
-                      {truncateAddress(funderAddress ?? ownerDisplayAddress ?? null, 4, 4) || '—'}
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span>Status</span>
-                    <span className="flex items-center gap-2 font-mono text-sm text-white">
-                      <Sparkles className={`h-3 w-3 ${autoSpendEnabled ? 'text-sky-200' : 'text-white/50'}`} />
-                      {autoSpendEnabled ? 'Auto spend' : 'Manual approval'}
-                    </span>
-                  </div>
                 </div>
               )}
               {balanceError && <p className="mt-3 text-xs leading-snug text-rose-300/80">{balanceError}</p>}
-              <div className="mt-3 flex flex-wrap gap-2">
-                <Button
-                  size="sm"
-                  onClick={handleFundSubAccount}
-                  disabled={isFundingSubAccount || isConnecting || !subAccountAddress}
-                >
-                  {isFundingSubAccount
-                    ? 'Funding…'
-                    : `Send ${defaultFundingLabel} ${normalizedBalanceSymbol} to checkout`}
-                </Button>
-              </div>
             </div>
 
             <Button
