@@ -2,7 +2,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { createBaseAccountSDK, getCryptoKeyAccount } from '@base-org/account';
-import { createPublicClient, http } from 'viem';
+import { createPublicClient, encodeFunctionData, erc20Abi, http } from 'viem';
 import { base, baseSepolia } from 'viem/chains';
 
 type WalletPermission = {
@@ -50,8 +50,10 @@ type BaseAccountContextValue = {
   isFetchingBalances: boolean;
   balanceError: string | null;
   walletUrl: string;
-  fundSubAccount: (amountWei?: bigint) => Promise<void>;
-  defaultSubAccountFundingWei: bigint;
+  fundSubAccount: (amount?: bigint) => Promise<void>;
+  defaultSubAccountFundingAmount: bigint;
+  balanceSymbol: string;
+  balanceDecimals: number;
 };
 
 const BaseAccountContext = createContext<BaseAccountContextValue | null>(null);
@@ -75,6 +77,17 @@ function parseAmount(value: string | undefined, fallback: bigint) {
   } catch {
     return fallback;
   }
+}
+
+function parseDecimals(value: string | undefined, fallback: number) {
+  if (!value) {
+    return fallback;
+  }
+  const parsed = Number.parseInt(value, 10);
+  if (!Number.isFinite(parsed) || parsed < 0) {
+    return fallback;
+  }
+  return parsed;
 }
 
 function toHex(value: bigint) {
@@ -113,6 +126,11 @@ function checkSpendPermission(entry: WalletPermission | undefined) {
 const spendLimitWei = parseAmount(process.env.NEXT_PUBLIC_BASE_AUTO_SPEND_LIMIT, 10n ** 15n);
 const spendLimitHex = toHex(spendLimitWei);
 const spendTokenAddress = process.env.NEXT_PUBLIC_BASE_AUTO_SPEND_TOKEN;
+const spendToken = isAddress(spendTokenAddress) ? (spendTokenAddress as `0x${string}`) : null;
+const spendTokenDecimals = spendToken
+  ? parseDecimals(process.env.NEXT_PUBLIC_BASE_AUTO_SPEND_TOKEN_DECIMALS, 6)
+  : 18;
+const balanceSymbol = spendToken ? process.env.NEXT_PUBLIC_BASE_AUTO_SPEND_TOKEN_SYMBOL ?? 'USDC' : 'ETH';
 const invoiceRecipientAddress = process.env.NEXT_PUBLIC_BASE_INVOICE_RECIPIENT;
 const invoiceAmountWei = parseAmount(process.env.NEXT_PUBLIC_BASE_INVOICE_WEI, 50_000_000_000_000n);
 const invoiceAmountHex = toHex(invoiceAmountWei);
@@ -121,9 +139,9 @@ const chainHex = `0x${chain.id.toString(16)}` as const;
 const isTestnet = network !== 'base';
 const defaultCheckoutRecipient = isAddress(invoiceRecipientAddress) ? invoiceRecipientAddress : null;
 const defaultWalletUrl = process.env.NEXT_PUBLIC_BASE_WALLET_URL ?? 'https://wallet.base.org';
-const defaultSubAccountFundingWei = parseAmount(
+const defaultSubAccountFundingAmount = parseAmount(
   process.env.NEXT_PUBLIC_BASE_SUBACCOUNT_FUND_WEI,
-  500_000_000_000_000n,
+  spendToken ? 25n * 10n ** BigInt(spendTokenDecimals) : 500_000_000_000_000n,
 );
 
 const defaultRpcHttpUrls = chain.rpcUrls.default?.http ?? [];
@@ -200,7 +218,8 @@ export function BaseAccountProvider({ children }: { children: React.ReactNode })
         ? (universalAddress as `0x${string}`)
         : null);
 
-      if (!publicClient) {
+      const canQuery = Boolean(provider?.request) || Boolean(publicClient);
+      if (!canQuery) {
         setBalanceError('Base RPC unavailable. Set NEXT_PUBLIC_BASE_RPC_URL to enable balance lookups.');
         setOwnerBalance(null);
         setSubAccountBalance(null);
@@ -218,15 +237,95 @@ export function BaseAccountProvider({ children }: { children: React.ReactNode })
 
       setIsFetchingBalances(true);
       setBalanceError(null);
+      let hadFailures = false;
+
+      const fetchTokenBalance = async (address: `0x${string}`) => {
+        if (!spendToken) {
+          return null;
+        }
+        if (provider?.request) {
+          try {
+            const data = encodeFunctionData({
+              abi: erc20Abi,
+              functionName: 'balanceOf',
+              args: [address],
+            });
+            const result = (await provider.request({
+              method: 'eth_call',
+              params: [
+                {
+                  to: spendToken,
+                  data,
+                },
+                'latest',
+              ],
+            })) as string | null;
+            if (typeof result === 'string' && HEX_PATTERN.test(result)) {
+              return BigInt(result);
+            }
+          } catch (providerTokenError) {
+            console.warn('Failed to fetch token balance from Base provider', providerTokenError);
+          }
+        }
+        if (publicClient) {
+          try {
+            return await publicClient.readContract({
+              address: spendToken,
+              abi: erc20Abi,
+              functionName: 'balanceOf',
+              args: [address],
+              blockTag: 'latest',
+            });
+          } catch (clientTokenError) {
+            console.warn('Failed to fetch token balance from Base RPC', clientTokenError);
+          }
+        }
+        return null;
+      };
+
+      const fetchNativeBalance = async (address: `0x${string}`) => {
+        if (provider?.request) {
+          try {
+            const result = (await provider.request({
+              method: 'eth_getBalance',
+              params: [address, 'latest'],
+            })) as string | null;
+            if (typeof result === 'string' && HEX_PATTERN.test(result)) {
+              return BigInt(result);
+            }
+          } catch (providerBalanceError) {
+            console.warn('Failed to fetch native balance from Base provider', providerBalanceError);
+          }
+        }
+        if (publicClient) {
+          try {
+            return await publicClient.getBalance({ address, blockTag: 'latest' });
+          } catch (clientBalanceError) {
+            console.warn('Failed to fetch native balance from Base RPC', clientBalanceError);
+          }
+        }
+        return null;
+      };
+
       try {
-        const addresses = new Map<`0x${string}`, bigint>();
+        const addresses = new Map<`0x${string}`, bigint | null>();
         const uniqueAddresses = [owner, subAccountAddress, universal]
           .filter((candidate): candidate is `0x${string}` => Boolean(candidate))
           .filter((value, index, array) => array.indexOf(value) === index);
 
         await Promise.all(
           uniqueAddresses.map(async (address) => {
-            const balance = await publicClient.getBalance({ address, blockTag: 'latest' });
+            let balance: bigint | null = null;
+            try {
+              const tokenBalance = await fetchTokenBalance(address);
+              balance = tokenBalance ?? (await fetchNativeBalance(address));
+            } catch (balanceFetchError) {
+              console.warn('Failed to fetch Base balance', balanceFetchError);
+              hadFailures = true;
+            }
+            if (balance === null) {
+              hadFailures = true;
+            }
             addresses.set(address, balance);
           }),
         );
@@ -234,6 +333,7 @@ export function BaseAccountProvider({ children }: { children: React.ReactNode })
         setOwnerBalance(owner ? addresses.get(owner) ?? null : null);
         setSubAccountBalance(subAccountAddress ? addresses.get(subAccountAddress) ?? null : null);
         setUniversalBalance(universal ? addresses.get(universal) ?? null : null);
+        setBalanceError(hadFailures ? 'Unable to load balances from Base RPC.' : null);
       } catch (balanceFetchError) {
         console.warn('Failed to fetch Base balances', balanceFetchError);
         setBalanceError(
@@ -246,7 +346,7 @@ export function BaseAccountProvider({ children }: { children: React.ReactNode })
         setIsFetchingBalances(false);
       }
     },
-    [ownerAddress, publicClient, subAccount?.address, universalAddress],
+    [ownerAddress, provider, publicClient, subAccount?.address, universalAddress],
   );
 
   useEffect(() => {
@@ -516,7 +616,7 @@ export function BaseAccountProvider({ children }: { children: React.ReactNode })
   }, [ensureSubAccount, provider, autoSpendEnabled, requestAutoSpend, refreshBalances]);
 
   const fundSubAccount = useCallback(
-    async (amountWei?: bigint) => {
+    async (amount?: bigint) => {
       const ensured = await ensureSubAccount();
       if (!ensured || !provider) {
         throw new Error('Unable to access Base sub account for funding');
@@ -527,12 +627,19 @@ export function BaseAccountProvider({ children }: { children: React.ReactNode })
         throw new Error('Unable to resolve signing wallet for funding');
       }
 
-      const value = amountWei ?? defaultSubAccountFundingWei;
+      const value = amount ?? defaultSubAccountFundingAmount;
       if (value <= 0n) {
         throw new Error('Funding amount must be greater than zero');
       }
 
       const valueHex = toHex(value);
+      const transferData = spendToken
+        ? encodeFunctionData({
+            abi: erc20Abi,
+            functionName: 'transfer',
+            args: [ensured.address as `0x${string}`, value],
+          })
+        : '0x';
 
       const callRequest: Record<string, unknown> = {
         version: '2.0',
@@ -540,11 +647,17 @@ export function BaseAccountProvider({ children }: { children: React.ReactNode })
         chainId: chainHex,
         from: owner,
         calls: [
-          {
-            to: ensured.address,
-            data: '0x',
-            value: valueHex,
-          },
+          spendToken
+            ? {
+                to: spendToken,
+                data: transferData,
+                value: '0x0',
+              }
+            : {
+                to: ensured.address,
+                data: '0x',
+                value: valueHex,
+              },
         ],
       };
 
@@ -563,9 +676,9 @@ export function BaseAccountProvider({ children }: { children: React.ReactNode })
           params: [
             {
               from: owner,
-              to: ensured.address,
-              value: valueHex,
-              data: '0x',
+              to: spendToken ?? ensured.address,
+              value: spendToken ? '0x0' : valueHex,
+              data: transferData,
             },
           ],
         });
@@ -644,7 +757,9 @@ export function BaseAccountProvider({ children }: { children: React.ReactNode })
       balanceError,
       walletUrl: defaultWalletUrl,
       fundSubAccount,
-      defaultSubAccountFundingWei,
+      defaultSubAccountFundingAmount,
+      balanceSymbol,
+      balanceDecimals: spendToken ? spendTokenDecimals : 18,
     }),
     [
       provider,

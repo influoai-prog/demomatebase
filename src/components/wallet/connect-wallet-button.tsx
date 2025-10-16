@@ -1,10 +1,10 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { Copy, ExternalLink, Loader2, LogOut, RefreshCw, Sparkles, Wallet2 } from 'lucide-react';
+import { Copy, Loader2, LogOut, RefreshCw, Sparkles, Wallet2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useBaseAccount } from './base-account-provider';
-import { formatEthBalance, truncateAddress } from '@/lib/utils';
+import { formatTokenBalance, truncateAddress } from '@/lib/utils';
 import { toast } from 'sonner';
 
 export function ConnectWalletButton() {
@@ -22,10 +22,10 @@ export function ConnectWalletButton() {
     refreshBalances,
     isFetchingBalances,
     balanceError,
-    isTestnet,
-    walletUrl,
     fundSubAccount,
-    defaultSubAccountFundingWei,
+    defaultSubAccountFundingAmount,
+    balanceSymbol,
+    balanceDecimals,
   } = useBaseAccount();
   const isConnected = Boolean(ownerAddress ?? universalAddress ?? subAccount?.address);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -36,8 +36,9 @@ export function ConnectWalletButton() {
   const connectedAddress = ownerAddress ?? universalAddress ?? subAccount?.address ?? null;
   const displayAddress = connectedAddress ?? '';
   const subAccountAddress = subAccount?.address ?? null;
-  const faucetUrl = isTestnet ? 'https://www.coinbase.com/faucets/base-sepolia-testnet' : null;
-  const defaultFundingLabel = formatEthBalance(defaultSubAccountFundingWei, 6);
+  const normalizedBalanceSymbol = balanceSymbol.toUpperCase();
+  const displayPrecision = normalizedBalanceSymbol === 'USDC' ? 2 : 4;
+  const defaultFundingLabel = formatTokenBalance(defaultSubAccountFundingAmount, balanceDecimals, displayPrecision);
   const ownerDisplayAddress = ownerAddress ?? connectedAddress;
   const isCopied = (address: string | null) =>
     Boolean(address && copiedAddress && copiedAddress.toLowerCase() === address.toLowerCase());
@@ -106,7 +107,9 @@ export function ConnectWalletButton() {
     setIsFundingSubAccount(true);
     try {
       await fundSubAccount();
-      toast.success(`Sent ${defaultFundingLabel} ETH to ${truncateAddress(subAccount.address, 6, 6)}`);
+      toast.success(
+        `Sent ${defaultFundingLabel} ${normalizedBalanceSymbol} to ${truncateAddress(subAccount.address, 6, 6)}`,
+      );
     } catch (fundError) {
       const fallback = fundError instanceof Error ? fundError.message : 'Funding failed';
       toast.error(fallback);
@@ -169,7 +172,11 @@ export function ConnectWalletButton() {
               <div className="mt-3 flex items-center justify-between text-xs text-white/60">
                 <span>Balance</span>
                 <span className="font-mono text-sm text-white">
-                  {isFetchingBalances ? 'Updating…' : ownerBalance !== null ? `${formatEthBalance(ownerBalance)} ETH` : '—'}
+                  {isFetchingBalances
+                    ? 'Updating…'
+                    : ownerBalance !== null
+                      ? `${formatTokenBalance(ownerBalance, balanceDecimals, displayPrecision)} ${normalizedBalanceSymbol}`
+                      : '—'}
                 </span>
               </div>
               {subAccountAddress && (
@@ -184,7 +191,7 @@ export function ConnectWalletButton() {
                       {isFetchingBalances
                         ? 'Updating…'
                         : subAccountBalance !== null
-                          ? `${formatEthBalance(subAccountBalance)} ETH`
+                          ? `${formatTokenBalance(subAccountBalance, balanceDecimals, displayPrecision)} ${normalizedBalanceSymbol}`
                           : '—'}
                     </span>
                   </div>
@@ -210,41 +217,11 @@ export function ConnectWalletButton() {
                   onClick={handleFundSubAccount}
                   disabled={isFundingSubAccount || isConnecting || !subAccountAddress}
                 >
-                  {isFundingSubAccount ? 'Funding…' : `Send ${defaultFundingLabel} ETH to checkout`}
+                  {isFundingSubAccount
+                    ? 'Funding…'
+                    : `Send ${defaultFundingLabel} ${normalizedBalanceSymbol} to checkout`}
                 </Button>
               </div>
-            </div>
-
-            <div className="grid gap-2">
-              {faucetUrl && (
-                <a
-                  className="flex w-full items-center justify-between rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-left text-xs font-medium uppercase tracking-[0.25em] text-white/70 transition hover:bg-white/15"
-                  href={faucetUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  <span>Open Base faucet</span>
-                  <ExternalLink className="h-4 w-4" />
-                </a>
-              )}
-              <a
-                className="flex w-full items-center justify-between rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-left text-xs font-medium uppercase tracking-[0.25em] text-white/70 transition hover:bg-white/15"
-                href={walletUrl}
-                target="_blank"
-                rel="noreferrer"
-              >
-                <span>Deposit manually</span>
-                <ExternalLink className="h-4 w-4" />
-              </a>
-              <a
-                className="flex w-full items-center justify-between rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-left text-xs font-medium uppercase tracking-[0.25em] text-white/70 transition hover:bg-white/15"
-                href="https://github.com/stephancill/sub-accounts-fc-demo"
-                target="_blank"
-                rel="noreferrer"
-              >
-                <span>Reference demo</span>
-                <ExternalLink className="h-4 w-4" />
-              </a>
             </div>
 
             <Button
