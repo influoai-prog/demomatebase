@@ -52,7 +52,7 @@ CDP_WALLET_SECRET=your-cdp-wallet-secret
 - `NEXT_PUBLIC_BASE_PAYMASTER_URL` configures an optional paymaster endpoint for the Base Account SDK.
 - `NEXT_PUBLIC_BASE_INVOICE_RECIPIENT` should point to the account that receives the $0.10 authorization transaction.
 - `NEXT_PUBLIC_BASE_INVOICE_WEI` controls the value (in wei) of the authorization invoice (defaults to roughly $0.10 of ETH).
-- `NEXT_PUBLIC_BASE_AUTO_SPEND_TOKEN` (optional) narrows spend permissions to a specific ERC-20 address; omit to accept the Base native asset.
+- `NEXT_PUBLIC_BASE_AUTO_SPEND_TOKEN` (optional) narrows spend permissions to a specific ERC-20 address; when omitted Mate Shop defaults to USDC (`0x833589fCd6eDb6E08f4f5F044bBd19c5436e3E6A` on Base, `0x036cbd53842c5426634e7929541ec2318f3dcf7e` on Base Sepolia).
 - `NEXT_PUBLIC_BASE_AUTO_SPEND_LIMIT` tunes the auto-spend ceiling in wei (defaults to 0.001 ETH when unset).
 - `NEXT_PUBLIC_BASE_CHECKOUT_RECIPIENT` designates the address that receives the Base Perfect Checkout payment (defaults to the invoice recipient when omitted).
 - `NEXT_PUBLIC_BASE_WALLET_URL` optionally points the Base Account SDK to a custom wallet URL (defaults to the standard Base wallet when omitted).

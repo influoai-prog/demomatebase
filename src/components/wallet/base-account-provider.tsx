@@ -123,14 +123,34 @@ function checkSpendPermission(entry: WalletPermission | undefined) {
   return entry.permissions.spend.some((permission) => Boolean(permission.limit));
 }
 
+const defaultSpendTokenConfig = network === 'base'
+  ? {
+      address: '0x833589fCd6eDb6E08f4f5F044bBd19c5436e3E6A' as `0x${string}`,
+      decimals: 6,
+      symbol: 'USDC',
+    }
+  : {
+      address: '0x036cbd53842c5426634e7929541ec2318f3dcf7e' as `0x${string}`,
+      decimals: 6,
+      symbol: 'USDC',
+    };
+
 const spendLimitWei = parseAmount(process.env.NEXT_PUBLIC_BASE_AUTO_SPEND_LIMIT, 10n ** 15n);
 const spendLimitHex = toHex(spendLimitWei);
 const spendTokenAddress = process.env.NEXT_PUBLIC_BASE_AUTO_SPEND_TOKEN;
-const spendToken = isAddress(spendTokenAddress) ? (spendTokenAddress as `0x${string}`) : null;
+const resolvedSpendToken = isAddress(spendTokenAddress)
+  ? (spendTokenAddress as `0x${string}`)
+  : defaultSpendTokenConfig.address;
+const spendToken = isAddress(resolvedSpendToken) ? resolvedSpendToken : null;
 const spendTokenDecimals = spendToken
-  ? parseDecimals(process.env.NEXT_PUBLIC_BASE_AUTO_SPEND_TOKEN_DECIMALS, 6)
+  ? parseDecimals(
+      process.env.NEXT_PUBLIC_BASE_AUTO_SPEND_TOKEN_DECIMALS,
+      defaultSpendTokenConfig.decimals,
+    )
   : 18;
-const balanceSymbol = spendToken ? process.env.NEXT_PUBLIC_BASE_AUTO_SPEND_TOKEN_SYMBOL ?? 'USDC' : 'ETH';
+const balanceSymbol = spendToken
+  ? process.env.NEXT_PUBLIC_BASE_AUTO_SPEND_TOKEN_SYMBOL ?? defaultSpendTokenConfig.symbol
+  : 'ETH';
 const invoiceRecipientAddress = process.env.NEXT_PUBLIC_BASE_INVOICE_RECIPIENT;
 const invoiceAmountWei = parseAmount(process.env.NEXT_PUBLIC_BASE_INVOICE_WEI, 50_000_000_000_000n);
 const invoiceAmountHex = toHex(invoiceAmountWei);
