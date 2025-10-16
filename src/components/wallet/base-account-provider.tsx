@@ -33,6 +33,9 @@ type BaseAccountContextValue = {
   autoSpendEnabled: boolean;
   disconnect: () => Promise<void>;
   error: string | null;
+  network: 'base' | 'base-sepolia';
+  isTestnet: boolean;
+  checkoutRecipient: `0x${string}` | null;
 };
 
 const BaseAccountContext = createContext<BaseAccountContextValue | null>(null);
@@ -43,19 +46,23 @@ const chain = network === 'base' ? base : baseSepolia;
 const HEX_PATTERN = /^0x[0-9a-fA-F]+$/;
 const ADDRESS_PATTERN = /^0x[a-fA-F0-9]{40}$/;
 
-function toHexAmount(value: string | undefined, fallback: bigint) {
+function parseAmount(value: string | undefined, fallback: bigint) {
   if (!value) {
-    return `0x${fallback.toString(16)}`;
+    return fallback;
   }
   const trimmed = value.trim();
-  if (HEX_PATTERN.test(trimmed)) {
-    return trimmed;
+  if (!trimmed) {
+    return fallback;
   }
   try {
-    return `0x${BigInt(trimmed).toString(16)}`;
+    return BigInt(HEX_PATTERN.test(trimmed) ? trimmed : trimmed);
   } catch {
-    return `0x${fallback.toString(16)}`;
+    return fallback;
   }
+}
+
+function toHex(value: bigint) {
+  return `0x${value.toString(16)}` as const;
 }
 
 function isAddress(candidate: string | undefined): candidate is `0x${string}` {
@@ -69,12 +76,16 @@ function checkSpendPermission(entry: WalletPermission | undefined) {
   return entry.permissions.spend.some((permission) => Boolean(permission.limit));
 }
 
-const spendLimitHex = toHexAmount(process.env.NEXT_PUBLIC_BASE_AUTO_SPEND_LIMIT, 10n ** 15n);
+const spendLimitWei = parseAmount(process.env.NEXT_PUBLIC_BASE_AUTO_SPEND_LIMIT, 10n ** 15n);
+const spendLimitHex = toHex(spendLimitWei);
 const spendTokenAddress = process.env.NEXT_PUBLIC_BASE_AUTO_SPEND_TOKEN;
 const invoiceRecipientAddress = process.env.NEXT_PUBLIC_BASE_INVOICE_RECIPIENT;
-const invoiceAmountHex = toHexAmount(process.env.NEXT_PUBLIC_BASE_INVOICE_WEI, 50_000_000_000_000n);
+const invoiceAmountWei = parseAmount(process.env.NEXT_PUBLIC_BASE_INVOICE_WEI, 50_000_000_000_000n);
+const invoiceAmountHex = toHex(invoiceAmountWei);
 const configuredPaymasterUrl = process.env.NEXT_PUBLIC_BASE_PAYMASTER_URL;
 const chainHex = `0x${chain.id.toString(16)}` as const;
+const isTestnet = network !== 'base';
+const defaultCheckoutRecipient = isAddress(invoiceRecipientAddress) ? invoiceRecipientAddress : null;
 
 function buildSdk() {
   const paymasterUrl = process.env.NEXT_PUBLIC_BASE_PAYMASTER_URL;
@@ -88,6 +99,13 @@ function buildSdk() {
       funding: 'spend-permissions'
     } as any,
     paymasterUrls: paymasterUrl ? { [chain.id]: paymasterUrl } : undefined
+  });
+  sdk.subAccount.setToOwnerAccount(async () => {
+    const { account } = await getCryptoKeyAccount();
+    if (!account) {
+      throw new Error('Unable to access Base account keys');
+    }
+    return { account } as any;
   });
   return sdk;
 }
@@ -375,6 +393,9 @@ export function BaseAccountProvider({ children }: { children: React.ReactNode })
       autoSpendEnabled,
       disconnect,
       error,
+      network,
+      isTestnet,
+      checkoutRecipient: defaultCheckoutRecipient,
     }),
     [
       provider,

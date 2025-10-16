@@ -8,6 +8,7 @@ import { useCart } from './cart-provider';
 import { calculateCartTotals, formatCurrency, truncateAddress } from '@/lib/utils';
 import { useBaseAccount } from '@/components/wallet/base-account-provider';
 import { toast } from 'sonner';
+import { runPerfectCheckout } from '@/lib/base-perfect-checkout';
 
 export function CartButton() {
   const { items, itemCount, totalCents, removeItem, clear, isOpen, setOpen, openCart } = useCart();
@@ -20,6 +21,8 @@ export function CartButton() {
     autoSpendEnabled,
     isConnecting,
     error,
+    isTestnet,
+    checkoutRecipient,
   } = useBaseAccount();
   const [isCheckingOut, setIsCheckingOut] = useState(false);
   const [isPayingInvoice, setIsPayingInvoice] = useState(false);
@@ -84,7 +87,13 @@ export function CartButton() {
       if (!ensured) {
         throw new Error('Unable to provision Base sub account');
       }
-      toast.success(`Order confirmed through ${truncateAddress(ensured.address)}`);
+      const payment = await runPerfectCheckout(totals.totalCents, {
+        recipient: checkoutRecipient ?? undefined,
+        testnet: isTestnet,
+      });
+      toast.success(`Order confirmed through ${truncateAddress(ensured.address)}`, {
+        description: `Payment hash ${truncateAddress(payment.id, 6, 6)}`,
+      });
       clear();
       setOpen(false);
       setInvoicePaid(false);
