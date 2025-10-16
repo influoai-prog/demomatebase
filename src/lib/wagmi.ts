@@ -5,17 +5,19 @@ type SupportedNetwork = 'base' | 'base-sepolia';
 
 const network = (process.env.NEXT_PUBLIC_NETWORK as SupportedNetwork | undefined) ?? 'base-sepolia';
 const chain = network === 'base' ? base : baseSepolia;
-const customRpcUrl = process.env.NEXT_PUBLIC_BASE_RPC_URL;
-const baseRpc = customRpcUrl && network === 'base' ? customRpcUrl : base.rpcUrls.default.http[0];
-const baseSepoliaRpc = customRpcUrl && network === 'base-sepolia' ? customRpcUrl : baseSepolia.rpcUrls.default.http[0];
+const rpcUrl = process.env.NEXT_PUBLIC_BASE_RPC_URL ?? chain.rpcUrls.default.http[0];
+
+const transports = {
+  [chain.id]: http(rpcUrl)
+} as Record<number, ReturnType<typeof http>>;
 
 export const wagmiConfig = createConfig({
   chains: [chain],
-  connectors: [],
-  transports: {
-    [base.id]: http(baseRpc),
-    [baseSepolia.id]: http(baseSepoliaRpc),
-  },
+  transports,
+  connectors: [
+    injected({ shimDisconnect: true }),
+    coinbaseWallet({ appName: 'Glass Gift Shop', preference: 'smartWalletOnly' })
+  ]
 });
 
 export type WagmiConfig = typeof wagmiConfig;
