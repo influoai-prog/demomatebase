@@ -59,6 +59,13 @@ type BaseAccountContextValue = {
   balanceDecimals: number;
   nativeBalanceSymbol: string;
   nativeBalanceDecimals: number;
+  spendTokenAddress: `0x${string}` | null;
+  spendTokenSymbol: string;
+  spendTokenDecimals: number;
+  spendLimit: bigint;
+  spendLimitHex: `0x${string}`;
+  invoiceAmount: bigint;
+  invoiceAmountHex: `0x${string}`;
 };
 
 const BaseAccountContext = createContext<BaseAccountContextValue | null>(null);
@@ -151,9 +158,10 @@ const spendTokenDecimals = spendToken
       defaultSpendTokenConfig.decimals,
     )
   : 18;
-const balanceSymbol = spendToken
+const spendTokenSymbol = spendToken
   ? process.env.NEXT_PUBLIC_BASE_AUTO_SPEND_TOKEN_SYMBOL ?? defaultSpendTokenConfig.symbol
   : 'ETH';
+const balanceSymbol = spendTokenSymbol;
 const defaultSpendLimit = spendToken
   ? 100n * 10n ** BigInt(spendTokenDecimals)
   : 10n ** 15n;
@@ -840,6 +848,13 @@ export function BaseAccountProvider({ children }: { children: React.ReactNode })
       balanceDecimals: spendToken ? spendTokenDecimals : 18,
       nativeBalanceSymbol: 'ETH',
       nativeBalanceDecimals: 18,
+      spendTokenAddress: spendToken,
+      spendTokenSymbol,
+      spendTokenDecimals,
+      spendLimit,
+      spendLimitHex,
+      invoiceAmount,
+      invoiceAmountHex,
     }),
     [
       provider,

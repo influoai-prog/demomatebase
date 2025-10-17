@@ -24,6 +24,8 @@ export function ConnectWalletButton() {
     balanceDecimals,
     nativeBalanceSymbol,
     nativeBalanceDecimals,
+    spendTokenSymbol,
+    spendTokenDecimals,
   } = useBaseAccount();
   const isConnected = Boolean(ownerAddress ?? universalAddress ?? subAccount?.address);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -33,8 +35,10 @@ export function ConnectWalletButton() {
   const connectedAddress = ownerAddress ?? universalAddress ?? subAccount?.address ?? null;
   const displayAddress = connectedAddress ?? '';
   const subAccountAddress = subAccount?.address ?? null;
-  const normalizedBalanceSymbol = balanceSymbol.toUpperCase();
-  const displayPrecision = normalizedBalanceSymbol === 'USDC' ? 2 : 4;
+  const resolvedTokenSymbol = spendTokenSymbol || balanceSymbol;
+  const normalizedBalanceSymbol = resolvedTokenSymbol.toUpperCase();
+  const precisionSource = spendTokenDecimals ?? balanceDecimals;
+  const displayPrecision = normalizedBalanceSymbol === 'USDC' ? 2 : Math.min(precisionSource, 6);
   const normalizedNativeSymbol = nativeBalanceSymbol.toUpperCase();
   const nativeDisplayPrecision = normalizedNativeSymbol === 'ETH' ? 4 : 2;
   const ownerDisplayAddress = ownerAddress ?? connectedAddress;

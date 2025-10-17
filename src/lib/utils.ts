@@ -18,6 +18,17 @@ export function formatTokenEstimate(cents: number, tokenPriceUsd: number): strin
   return tokens.toFixed(6);
 }
 
+function formatWithPrecision(raw: string, maximumFractionDigits: number) {
+  const numeric = Number.parseFloat(raw);
+  if (!Number.isFinite(numeric)) {
+    return raw;
+  }
+  return new Intl.NumberFormat('en-US', {
+    minimumFractionDigits: 0,
+    maximumFractionDigits,
+  }).format(numeric);
+}
+
 export function centsToUsdAmount(cents: number): string {
   const isNegative = cents < 0;
   const absolute = Math.abs(cents);
@@ -48,24 +59,9 @@ export function truncateAddress(address?: string | null, lead = 4, tail = 4): st
 }
 
 export function formatEthBalance(value: bigint, maximumFractionDigits = 4): string {
-  const numeric = Number.parseFloat(formatEther(value));
-  if (!Number.isFinite(numeric)) {
-    return formatEther(value);
-  }
-  return new Intl.NumberFormat('en-US', {
-    minimumFractionDigits: 0,
-    maximumFractionDigits,
-  }).format(numeric);
+  return formatWithPrecision(formatEther(value), maximumFractionDigits);
 }
 
 export function formatTokenBalance(value: bigint, decimals: number, maximumFractionDigits = 4): string {
-  const formatted = formatUnits(value, decimals);
-  const numeric = Number.parseFloat(formatted);
-  if (!Number.isFinite(numeric)) {
-    return formatted;
-  }
-  return new Intl.NumberFormat('en-US', {
-    minimumFractionDigits: 0,
-    maximumFractionDigits,
-  }).format(numeric);
+  return formatWithPrecision(formatUnits(value, decimals), maximumFractionDigits);
 }
