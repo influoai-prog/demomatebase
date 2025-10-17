@@ -1,4 +1,5 @@
 import { type ClassValue, clsx } from 'clsx';
+import { formatUnits } from 'viem';
 import { twMerge } from 'tailwind-merge';
 
 export function cn(...inputs: ClassValue[]): string {
@@ -15,6 +16,26 @@ export function formatCurrency(cents: number): string {
 export function formatTokenEstimate(cents: number, tokenPriceUsd: number): string {
   const tokens = cents / 100 / tokenPriceUsd;
   return tokens.toFixed(6);
+}
+
+function formatWithPrecision(raw: string, maximumFractionDigits: number) {
+  const numeric = Number.parseFloat(raw);
+  if (!Number.isFinite(numeric)) {
+    return raw;
+  }
+  return new Intl.NumberFormat('en-US', {
+    minimumFractionDigits: 0,
+    maximumFractionDigits,
+  }).format(numeric);
+}
+
+export function centsToUsdAmount(cents: number): string {
+  const isNegative = cents < 0;
+  const absolute = Math.abs(cents);
+  const whole = Math.floor(absolute / 100);
+  const remainder = absolute % 100;
+  const value = `${whole}.${remainder.toString().padStart(2, '0')}`;
+  return isNegative ? `-${value}` : value;
 }
 
 export function calculateCartTotals(lines: Array<{ priceCents: number; quantity: number }>) {
@@ -35,4 +56,8 @@ export function truncateAddress(address?: string | null, lead = 4, tail = 4): st
     return address;
   }
   return `${address.slice(0, lead + 2)}…${address.slice(-tail)}`;
+}
+
+export function formatTokenBalance(value: bigint, decimals: number, maximumFractionDigits = 4): string {
+  return formatWithPrecision(formatUnits(value, decimals), maximumFractionDigits);
 }
