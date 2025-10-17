@@ -1,5 +1,5 @@
 import { type ClassValue, clsx } from 'clsx';
-import { formatEther, formatUnits } from 'viem';
+import { formatEther } from 'viem';
 import { twMerge } from 'tailwind-merge';
 
 export function cn(...inputs: ClassValue[]): string {
@@ -16,17 +16,6 @@ export function formatCurrency(cents: number): string {
 export function formatTokenEstimate(cents: number, tokenPriceUsd: number): string {
   const tokens = cents / 100 / tokenPriceUsd;
   return tokens.toFixed(6);
-}
-
-function formatWithPrecision(raw: string, maximumFractionDigits: number) {
-  const numeric = Number.parseFloat(raw);
-  if (!Number.isFinite(numeric)) {
-    return raw;
-  }
-  return new Intl.NumberFormat('en-US', {
-    minimumFractionDigits: 0,
-    maximumFractionDigits,
-  }).format(numeric);
 }
 
 export function centsToUsdAmount(cents: number): string {
@@ -59,9 +48,12 @@ export function truncateAddress(address?: string | null, lead = 4, tail = 4): st
 }
 
 export function formatEthBalance(value: bigint, maximumFractionDigits = 4): string {
-  return formatWithPrecision(formatEther(value), maximumFractionDigits);
-}
-
-export function formatTokenBalance(value: bigint, decimals: number, maximumFractionDigits = 4): string {
-  return formatWithPrecision(formatUnits(value, decimals), maximumFractionDigits);
+  const numeric = Number.parseFloat(formatEther(value));
+  if (!Number.isFinite(numeric)) {
+    return formatEther(value);
+  }
+  return new Intl.NumberFormat('en-US', {
+    minimumFractionDigits: 0,
+    maximumFractionDigits,
+  }).format(numeric);
 }

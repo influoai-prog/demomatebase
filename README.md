@@ -4,11 +4,12 @@ Mate Shop is a glassmorphism-inspired Base commerce demo built with the Next.js 
 
 ## Features
 
-- ✨ Frosted glass UI for a curated twelve-item shelf with responsive layout and inline cart actions
-- 🧾 Cart math with subtotal, tax, and total calculations in USD cents plus Base Perfect Checkout launching directly from the cart
-- 🔐 Base Account SDK integration that creates Sub Accounts on connect, requests auto-spend permissions, and manages spend tokens
-- 💳 Base Perfect Checkout flow that settles invoices with USDC (or a configured token) to the merchant recipient
-- 👛 Wallet tray showing the connected signing wallet with copy/refresh controls, token and native balances, and checkout wallet metadata
+- ✨ Frosted glass aesthetic with a responsive card grid for twelve curated products
+- 👜 Inline cart controls with add-to-cart and Base-powered checkout from every product
+- 🧊 Real Base Account SDK integration that provisions Sub Accounts on connect, enables auto spend permissions, and supports skipping repetitive approvals
+- 💳 Embedded Base Perfect Checkout flow that routes cart totals through Base Pay using Sub Accounts
+- 📦 Configurable metadata, paymaster routing, and Base network selection via environment variables
+- 💼 Wallet tray surfaces the signing (owner) wallet alongside the sub account, live balances, and faucet/manual funding shortcuts
 
 ## Getting Started
 
@@ -41,21 +42,22 @@ NEXT_PUBLIC_BASE_AUTO_SPEND_TOKEN_SYMBOL=USDC
 NEXT_PUBLIC_BASE_AUTO_SPEND_LIMIT=1000000000000000
 NEXT_PUBLIC_BASE_CHECKOUT_RECIPIENT=0xYourMerchantAddress
 NEXT_PUBLIC_BASE_WALLET_URL=https://wallet.base.org
-NEXT_PUBLIC_BASE_SUBACCOUNT_FUND_WEI=500000000000000
 ```
 
-- `NEXT_PUBLIC_NETWORK` accepts `base` (mainnet) or `base-sepolia` (testnet) and controls default contract metadata.
-- `NEXT_PUBLIC_BASE_RPC_URL` overrides the RPC used for balance lookups; when omitted the Base chain defaults are used.
-- `NEXT_PUBLIC_BASE_APP_NAME` and `NEXT_PUBLIC_BASE_APP_LOGO` customize Base Account connect dialogs.
-- `NEXT_PUBLIC_BASE_PAYMASTER_URL` injects an optional paymaster endpoint for sponsored transactions.
-- `NEXT_PUBLIC_BASE_INVOICE_RECIPIENT` designates the account that receives the authorization invoice and checkout funds.
-- `NEXT_PUBLIC_BASE_INVOICE_AMOUNT` sets the invoice amount in base units (defaults to 0.10 USDC when a spend token is configured).
-- `NEXT_PUBLIC_BASE_AUTO_SPEND_TOKEN` narrows spend permissions to a specific ERC-20 token. When omitted Mate Shop defaults to network USDC (`0x833589fCd6eDb6E08f4f5F044bBd19c5436e3E6A` on Base, `0x036cbd53842c5426634e7929541ec2318f3dcf7e` on Base Sepolia).
-- `NEXT_PUBLIC_BASE_AUTO_SPEND_TOKEN_DECIMALS` and `NEXT_PUBLIC_BASE_AUTO_SPEND_TOKEN_SYMBOL` override the token metadata used for balances and invoice math.
-- `NEXT_PUBLIC_BASE_AUTO_SPEND_LIMIT` controls the auto-spend ceiling (defaults to 100 USDC when a token is configured or 0.001 ETH otherwise).
-- `NEXT_PUBLIC_BASE_CHECKOUT_RECIPIENT` overrides the checkout destination (falls back to the invoice recipient when omitted).
-- `NEXT_PUBLIC_BASE_WALLET_URL` points the Base Account SDK at a custom wallet URL.
-- `NEXT_PUBLIC_BASE_SUBACCOUNT_FUND_WEI` sets the default amount transferred from the signing wallet when manually funding the sub account.
+- `NEXT_PUBLIC_NETWORK` may be set to `base` for mainnet or `base-sepolia` for testnet.
+- `NEXT_PUBLIC_BASE_RPC_URL` overrides the default RPC URL for the chosen network.
+- `NEXT_PUBLIC_BASE_APP_NAME` and `NEXT_PUBLIC_BASE_APP_LOGO` customize the metadata surfaced in the Base Account connect dialog.
+- `NEXT_PUBLIC_BASE_PAYMASTER_URL` configures an optional paymaster endpoint for the Base Account SDK.
+- `NEXT_PUBLIC_BASE_INVOICE_RECIPIENT` should point to the account that receives the $0.10 authorization transaction.
+- `NEXT_PUBLIC_BASE_INVOICE_WEI` controls the value (in wei) of the authorization invoice (defaults to roughly $0.10 of ETH).
+- `NEXT_PUBLIC_BASE_AUTO_SPEND_TOKEN` (optional) narrows spend permissions to a specific ERC-20 address; omit to accept the Base native asset.
+- `NEXT_PUBLIC_BASE_AUTO_SPEND_LIMIT` tunes the auto-spend ceiling in wei (defaults to 0.001 ETH when unset).
+- `NEXT_PUBLIC_BASE_CHECKOUT_RECIPIENT` designates the address that receives the Base Perfect Checkout payment (defaults to the invoice recipient when omitted).
+- `NEXT_PUBLIC_BASE_WALLET_URL` optionally points the Base Account SDK to a custom wallet URL (defaults to the standard Base wallet when omitted).
+
+### Perfect Checkout
+
+Mate Shop wires the cart experience into Base Perfect Checkout. After provisioning a Sub Account and settling the $0.10 invoice, the “Complete Checkout” button triggers the `pay` helper from the Base Account SDK. This launches the Base Perfect Checkout overlay, requests an Auto Spend permission if needed, and settles the cart total with USDC to the configured merchant address. Transaction hashes are surfaced back in the UI so shoppers can verify the payment.
 
 ## Perfect Checkout
 
